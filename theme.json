@@ -1,0 +1,31 @@
+{
+    "defaults": {
+        "colours": {
+            "dark_bg": "#2D2D3D",
+            "normal_border": "#606070",
+            "hovered_border": "#9090A0",
+            "text": "#E0E0E8"
+        }
+    },
+    "#params_panel": {
+        "colours": {
+            "dark_bg": "#282837"
+        }
+    },
+    "#bottom_panel": {
+        "colours": {
+            "dark_bg": "#282837"
+        }
+    },
+    "label": {
+        "misc": {
+            "text_horiz_alignment": "left"
+        }
+    },
+    "text_entry_line":
+    {
+        "colours": {
+            "dark_bg": "#353545"
+        }
+    }
+}

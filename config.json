@@ -28,7 +28,7 @@
   },
   "presentation_settings": {
     "question_text": "WHICH IS THE SUPERIOR CHROMA PLASM?",
-    "font_path": "assets/fonts/runescape.ttf",
+    "font_path": "src/assets/fonts/runescape.ttf",
     "font_size": 80
   }
 }

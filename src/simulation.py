@@ -39,6 +39,22 @@ class Simulation:
         self.target_cam_center_y = SIM_HEIGHT / 2.0
         self.target_cam_center_x = SIM_WIDTH / 2.0
 
+    def get_param(self, team, key):
+        """
+        Gets a parameter value. Checks for a team-specific override first,
+        then falls back to the global config.
+        """
+        # Find a base belonging to the team to check for an override
+        for base in self.bases:
+            if base.team == team:
+                # If the base has a specific override for this key, use it
+                if key in base.params:
+                    return base.params[key]
+                break # Found the team's base, no need to check others
+        
+        # If no override was found, return the global value from the config
+        return getattr(self.config, key)
+
     def add_soldier(self, soldier):
         """Adds a new soldier to the simulation."""
         team_list = self.red_soldiers if soldier.team == 'red' else self.blue_soldiers
@@ -67,19 +83,22 @@ class Simulation:
                     base_mask[y, x] = True
 
         # 1. Decay everything
-        self.red_pheromone *= self.config.pheromone_decay_rate
-        self.blue_pheromone *= self.config.pheromone_decay_rate
+        self.red_pheromone *= self.get_param('red', 'pheromone_decay_rate')
+        self.blue_pheromone *= self.get_param('blue', 'pheromone_decay_rate')
         
         # 2. Deposit from soldiers
+        red_deposit = self.get_param('red', 'pheromone_deposit_amount')
+        blue_deposit = self.get_param('blue', 'pheromone_deposit_amount')
         for s in self.red_soldiers:
-            if s.y is not None: self.red_pheromone[s.y, s.x] += self.config.pheromone_deposit_amount
+            if s.y is not None: self.red_pheromone[s.y, s.x] += red_deposit
         for s in self.blue_soldiers:
-            if s.y is not None: self.blue_pheromone[s.y, s.x] += self.config.pheromone_deposit_amount
-            
+            if s.y is not None: self.blue_pheromone[s.y, s.x] += blue_deposit
+
         # 3. Blur (diffuse) the existing pheromone map
-        if self.config.pheromone_blur_sigma > 0:
-            self.red_pheromone = gaussian_filter(self.red_pheromone, sigma=self.config.pheromone_blur_sigma)
-            self.blue_pheromone = gaussian_filter(self.blue_pheromone, sigma=self.config.pheromone_blur_sigma)
+        red_blur = self.get_param('red', 'pheromone_blur_sigma')
+        blue_blur = self.get_param('blue', 'pheromone_blur_sigma')
+        if red_blur > 0: self.red_pheromone = gaussian_filter(self.red_pheromone, sigma=red_blur)
+        if blue_blur > 0: self.blue_pheromone = gaussian_filter(self.blue_pheromone, sigma=blue_blur)
 
         # 4. Pump from bases AFTER blurring
         for base in self.bases:
@@ -118,7 +137,8 @@ class Simulation:
                 if 0 <= ny < self.grid_size[0] and 0 <= nx < self.grid_size[1]:
                     defender = self.object_grid[ny, nx]
                     if defender and defender.y is not None and defender.team != soldier.team:
-                        if random.random() < self.config.combat_win_chance:
+                        win_chance = self.get_param(soldier.team, 'combat_win_chance')                        
+                        if random.random() < win_chance:
                             vfx_y, vfx_x = defender.y, defender.x
                             vfx_color = COLOR_MAP[RED_SOLDIER if defender.team == 'red' else BLUE_SOLDIER]
                             self.remove_soldier(defender)

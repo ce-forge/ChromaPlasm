@@ -10,6 +10,17 @@ class Base:
         self.shape_name = shape_name
         self.config = config
         self.scale = scale
+        self.id = f"{team}_{shape_name}_{pivot_y}_{pivot_x}"
+
+        self.params = {
+            # We start with the base-specific params.
+            # The global slime params will be added by the UI if they are changed.
+            'spawn_rate': self.config.spawn_rate,
+            'units_per_spawn': self.config.units_per_spawn
+        }
+
+        self.spawn_rate = self.config.spawn_rate
+        self.units_per_spawn = self.config.units_per_spawn
 
         self.core_template = self._get_shape_template(shape_name)
         self.current_armor_pixels, self.current_core_pixels, self.exit_ports = [], [], []
@@ -76,11 +87,11 @@ class Base:
         """Creates new soldiers based on the configured spawn rate."""
         self.spawn_cooldown -= 1
         if self.spawn_cooldown <= 0:
-            for _ in range(self.config.units_per_spawn):
+            for _ in range(self.params['units_per_spawn']):
                 if not self.exit_ports: continue
                 spawn_y, spawn_x = random.choice(self.exit_ports)
                 if 0 <= spawn_y < SIM_HEIGHT and 0 <= spawn_x < SIM_WIDTH and sim.object_grid[spawn_y, spawn_x] is None:
                     soldier = Soldier(spawn_y, spawn_x, self.team)
                     soldier.base_pivot = self.pivot
                     sim.add_soldier(soldier)
-            self.spawn_cooldown = self.config.spawn_rate
+            self.spawn_cooldown = self.params['spawn_rate']

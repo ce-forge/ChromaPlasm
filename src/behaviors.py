@@ -16,51 +16,48 @@ class SlimeMoldBehavior(Behavior):
         pheromone_grid = sim.red_pheromone if soldier.team == 'red' else sim.blue_pheromone
         y, x = soldier.y, soldier.x
 
-        # Instead of just 8 neighbors, we sense in a cone in front of the soldier.
-        # The direction is based on the soldier's last move (its momentum).
+        # --- NEW: Steer-ahead and Random Sensing ---
+        # Get momentum vector
         forward_vec = soldier.last_move
-        # Normalize the forward vector to get a clear direction
+        if forward_vec == (0,0): # If no momentum, pick random direction
+            forward_vec = (random.uniform(-1,1), random.uniform(-1,1))
+        
+        # Normalize
         norm = np.sqrt(forward_vec[0]**2 + forward_vec[1]**2)
         if norm > 0:
             forward_vec = (forward_vec[0]/norm, forward_vec[1]/norm)
-        else: # If no momentum, pick a random direction
-            forward_vec = (random.uniform(-1,1), random.uniform(-1,1))
 
         potential_moves = []
         
-        # Sense 3 points: one straight ahead, and two at +/- 45 degrees
-        for angle_offset in [-0.6, 0, 0.6]: # Radians for ~45 degrees
-            angle = np.arctan2(forward_vec[0], forward_vec[1]) + angle_offset
-            
-            # Check a few pixels out in that direction
-            for distance in [1, 2, 3]:
-                ny = int(y + distance * np.sin(angle))
-                nx = int(x + distance * np.cos(angle))
-                
-                if 0 <= ny < sim.grid_size[0] and 0 <= nx < sim.grid_size[1]:
-                    scent = pheromone_grid[ny, nx]
-                    potential_moves.append(((ny, nx), scent))
+        # 1. Main sensor: steer towards this point ahead
+        steer_distance = 5
+        steer_y = int(y + forward_vec[0] * steer_distance)
+        steer_x = int(x + forward_vec[1] * steer_distance)
 
-        # Also include the 8 neighbors as a fallback to prevent getting stuck
-        for dy in [-1, 0, 1]:
-            for dx in [-1, 0, 1]:
-                if dy == 0 and dx == 0: continue
-                ny, nx = y + dy, x + dx
-                if 0 <= ny < sim.grid_size[0] and 0 <= nx < sim.grid_size[1]:
-                    potential_moves.append(((ny, nx), pheromone_grid[ny,nx]))
+        # 2. Random sensor: also check a random point nearby to encourage exploration
+        rand_y = y + random.randint(-8, 8)
+        rand_x = x + random.randint(-8, 8)
 
-        if not potential_moves:
-            return (y, x)
+        # 3. Sample pheromones at these points and neighbors
+        for sy, sx in [(steer_y, steer_x), (rand_y, rand_x)]:
+            # Check 3x3 area around the sensor point
+            for dy in [-1, 0, 1]:
+                for dx in [-1, 0, 1]:
+                    ny, nx = sy + dy, sx + dx
+                    if 0 <= ny < sim.grid_size[0] and 0 <= nx < sim.grid_size[1]:
+                        potential_moves.append(((ny,nx), pheromone_grid[ny,nx]))
 
-        # Sort moves by scent
+        if not potential_moves: return (y,x)
+
+        # Find the single best position from all sensed points
         potential_moves.sort(key=lambda item: item[1], reverse=True)
-        
-        # Pick randomly from the top 20% of best-scented locations
-        # This is the key to creating branching, exploratory paths.
-        num_choices = max(1, int(len(potential_moves) * 0.2))
-        best_pos = random.choice(potential_moves[:num_choices])[0]
+        best_pos = potential_moves[0][0]
+
+        # Move towards the best sensed position, but only one step at a time
+        final_move_y = y + np.sign(best_pos[0] - y)
+        final_move_x = x + np.sign(best_pos[1] - x)
 
         # Update momentum
-        soldier.last_move = (best_pos[0] - y, best_pos[1] - x)
-        
-        return best_pos
+        soldier.last_move = (final_move_y - y, final_move_x - x)
+
+        return (final_move_y, final_move_x)
