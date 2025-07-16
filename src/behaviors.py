@@ -1,6 +1,43 @@
 import numpy as np
 import random
 from src.constants import *
+from numba import jit
+
+@jit(nopython=True, fastmath=True, cache=True)
+def get_next_move(y, x, heading, pheromone_grid, grid_h, grid_w, 
+                  sensor_angle_rad, rotation_angle_rad, sensor_dist):
+    """
+    A Numba-optimized function that performs the SENSE->ROTATE->MOVE cycle.
+    This is a standalone function for maximum performance.
+    """
+    # 1. SENSE: Check pheromones at three sensor points
+    def get_scent_at(angle):
+        sensor_y = int(y + sensor_dist * np.sin(angle))
+        sensor_x = int(x + sensor_dist * np.cos(angle))
+        if 0 <= sensor_y < grid_h and 0 <= sensor_x < grid_w:
+            return pheromone_grid[sensor_y, sensor_x]
+        return 0.0
+
+    scent_forward = get_scent_at(heading)
+    scent_left = get_scent_at(heading - sensor_angle_rad)
+    scent_right = get_scent_at(heading + sensor_angle_rad)
+
+    # 2. ROTATE: Adjust heading based on which sensor has the strongest scent
+    if scent_forward > scent_left and scent_forward > scent_right:
+        heading += 0.0
+    elif scent_left > scent_right:
+        heading -= rotation_angle_rad
+    elif scent_right > scent_left:
+        heading += rotation_angle_rad
+    else:
+        heading += random.uniform(-rotation_angle_rad, rotation_angle_rad)
+
+    # 3. MOVE: Calculate the new position one step along the new heading
+    final_y = y + np.sin(heading)
+    final_x = x + np.cos(heading)
+
+    return (int(round(final_y)), int(round(final_x))), heading
+
 
 class Behavior:
     """Abstract base class for all agent AI strategies."""
@@ -9,55 +46,22 @@ class Behavior:
 
 class SlimeMoldBehavior(Behavior):
     """
-    A behavior where agents follow pheromone trails with a degree of randomness
-    and forward-facing sensory input, creating more organic trails.
+    This class acts as a wrapper, preparing data for the optimized Numba function.
     """
     def get_next_move(self, soldier, sim):
+        params = sim.get_params_for_team(soldier.team)
         pheromone_grid = sim.red_pheromone if soldier.team == 'red' else sim.blue_pheromone
-        y, x = soldier.y, soldier.x
-
-        # --- NEW: Steer-ahead and Random Sensing ---
-        # Get momentum vector
-        forward_vec = soldier.last_move
-        if forward_vec == (0,0): # If no momentum, pick random direction
-            forward_vec = (random.uniform(-1,1), random.uniform(-1,1))
         
-        # Normalize
-        norm = np.sqrt(forward_vec[0]**2 + forward_vec[1]**2)
-        if norm > 0:
-            forward_vec = (forward_vec[0]/norm, forward_vec[1]/norm)
-
-        potential_moves = []
+        sensor_angle_rad = np.deg2rad(params['sensor_angle_degrees'])
+        rotation_angle_rad = np.deg2rad(params['rotation_angle_degrees'])
         
-        # 1. Main sensor: steer towards this point ahead
-        steer_distance = 5
-        steer_y = int(y + forward_vec[0] * steer_distance)
-        steer_x = int(x + forward_vec[1] * steer_distance)
-
-        # 2. Random sensor: also check a random point nearby to encourage exploration
-        rand_y = y + random.randint(-8, 8)
-        rand_x = x + random.randint(-8, 8)
-
-        # 3. Sample pheromones at these points and neighbors
-        for sy, sx in [(steer_y, steer_x), (rand_y, rand_x)]:
-            # Check 3x3 area around the sensor point
-            for dy in [-1, 0, 1]:
-                for dx in [-1, 0, 1]:
-                    ny, nx = sy + dy, sx + dx
-                    if 0 <= ny < sim.grid_size[0] and 0 <= nx < sim.grid_size[1]:
-                        potential_moves.append(((ny,nx), pheromone_grid[ny,nx]))
-
-        if not potential_moves: return (y,x)
-
-        # Find the single best position from all sensed points
-        potential_moves.sort(key=lambda item: item[1], reverse=True)
-        best_pos = potential_moves[0][0]
-
-        # Move towards the best sensed position, but only one step at a time
-        final_move_y = y + np.sign(best_pos[0] - y)
-        final_move_x = x + np.sign(best_pos[1] - x)
-
-        # Update momentum
-        soldier.last_move = (final_move_y - y, final_move_x - x)
-
-        return (final_move_y, final_move_x)
+        (new_y, new_x), new_heading = get_next_move(
+            soldier.y, soldier.x, soldier.heading, pheromone_grid,
+            sim.grid_size[0], sim.grid_size[1],
+            sensor_angle_rad, rotation_angle_rad,
+            params['sensor_distance']
+        )
+        
+        soldier.heading = new_heading
+        
+        return new_y, new_x

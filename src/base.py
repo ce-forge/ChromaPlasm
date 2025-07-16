@@ -1,7 +1,6 @@
 import numpy as np
 import random
 from src.constants import *
-from src.soldier import Soldier
 
 class Base:
     def __init__(self, team, pivot_y, pivot_x, shape_name, config, scale=1.0):
@@ -13,8 +12,6 @@ class Base:
         self.id = f"{team}_{shape_name}_{pivot_y}_{pivot_x}"
 
         self.params = {
-            # We start with the base-specific params.
-            # The global slime params will be added by the UI if they are changed.
             'spawn_rate': self.config.spawn_rate,
             'units_per_spawn': self.config.units_per_spawn
         }
@@ -29,7 +26,6 @@ class Base:
         self.spawn_cooldown = 0
 
     def _bresenham_line(self, y1, x1, y2, x2):
-        """Standard Bresenham's line algorithm. Yields (y, x) tuples."""
         dx, dy = abs(x2 - x1), abs(y2 - y1)
         sx, sy = 1 if x1 < x2 else -1, 1 if y1 < y2 else -1
         err = dx - dy
@@ -41,7 +37,6 @@ class Base:
             if e2 < dx: err += dx; y1 += sy
 
     def _get_shape_template(self, name):
-        """Returns a list of CORE line segments. Segments are ((y1,x1), (y2,x2))."""
         if name == 'Y':
             return [ ((4, 0), (-1, 0)), ((-1, 0), (-4, -3)), ((-1, 0), (-4, 3)) ]
         if name == 'N':
@@ -49,7 +44,6 @@ class Base:
         return [ ((-2,-2), (-2,2)), ((-2,2), (2,2)), ((2,2), (2,-2)), ((2,-2), (-2,-2)) ]
 
     def recalculate_geometry(self):
-        """Applies scaling and generates the full base shape and exit ports."""
         self.current_armor_pixels.clear(); self.current_core_pixels.clear(); self.exit_ports.clear()
         
         core_set = set()
@@ -84,14 +78,26 @@ class Base:
             ])
 
     def update_spawning(self, sim):
-        """Creates new soldiers based on the configured spawn rate."""
+        """Creates new soldiers, searching for a free spawn point if the first is clogged."""
         self.spawn_cooldown -= 1
+
         if self.spawn_cooldown <= 0:
-            for _ in range(self.params['units_per_spawn']):
+            units_to_spawn = int(sim.get_param(self.team, 'units_per_spawn'))
+            for _ in range(units_to_spawn):
                 if not self.exit_ports: continue
+                
+                # THE FIX: Try to find an open spawn point near the exit port.
                 spawn_y, spawn_x = random.choice(self.exit_ports)
-                if 0 <= spawn_y < SIM_HEIGHT and 0 <= spawn_x < SIM_WIDTH and sim.object_grid[spawn_y, spawn_x] is None:
-                    soldier = Soldier(spawn_y, spawn_x, self.team)
-                    soldier.base_pivot = self.pivot
-                    sim.add_soldier(soldier)
-            self.spawn_cooldown = self.params['spawn_rate']
+                is_spawned = False
+                # Search a 3x3 area around the chosen exit port for a free spot.
+                for dy in range(-1, 2):
+                    for dx in range(-1, 2):
+                        ny, nx = spawn_y + dy, spawn_x + dx
+                        if 0 <= ny < SIM_HEIGHT and 0 <= nx < SIM_WIDTH and sim.object_grid[ny, nx] == -1:
+                            sim.add_soldier(ny, nx, self.team, np.random.uniform(0, 2 * np.pi))
+                            is_spawned = True
+                            break
+                    if is_spawned:
+                        break
+            
+            self.spawn_cooldown = int(sim.get_param(self.team, 'spawn_rate'))
