@@ -254,7 +254,9 @@ class Dashboard:
         if event.type == pygame.MOUSEMOTION and self.dragged_object:
             new_y, new_x = world_y - self.drag_offset[0], world_x - self.drag_offset[1]
             if self.drag_type == 'base':
-                self.dragged_object.pivot = (int(new_y), int(new_x))
+                snapped_y = round(new_y / EDITOR_GRID_SNAP_SIZE) * EDITOR_GRID_SNAP_SIZE
+                snapped_x = round(new_x / EDITOR_GRID_SNAP_SIZE) * EDITOR_GRID_SNAP_SIZE
+                self.dragged_object.pivot = (int(snapped_y), int(snapped_x))
                 self.dragged_object.recalculate_geometry()
             elif self.drag_type == 'spawn_port':
                 self.dragged_object.exit_ports[self.selected_port_index] = (int(new_y), int(new_x))
