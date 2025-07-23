@@ -8,7 +8,6 @@ def get_next_move(y, x, heading, pheromone_grid, grid_h, grid_w,
                   sensor_angle_rad, rotation_angle_rad, sensor_dist):
     """
     A Numba-optimized function that performs the SENSE->ROTATE->MOVE cycle.
-    This is a standalone function for maximum performance.
     """
     # 1. SENSE: Check pheromones at three sensor points
     def get_scent_at(angle):
@@ -22,14 +21,15 @@ def get_next_move(y, x, heading, pheromone_grid, grid_h, grid_w,
     scent_left = get_scent_at(heading - sensor_angle_rad)
     scent_right = get_scent_at(heading + sensor_angle_rad)
 
-    # 2. ROTATE: Adjust heading based on which sensor has the strongest scent
-    if scent_forward > scent_left and scent_forward > scent_right:
-        heading += 0.0
+    # 2. ROTATE: Adjust heading based on which sensor has the strongest scent.
+    forward_bias = 1.2
+    if (scent_forward * forward_bias) >= scent_left and (scent_forward * forward_bias) >= scent_right:
+        heading += 0.0 # Prefer to go forward
     elif scent_left > scent_right:
         heading -= rotation_angle_rad
     elif scent_right > scent_left:
         heading += rotation_angle_rad
-    else:
+    else: # If scents are equal (and not zero), randomly choose a turn
         heading += random.uniform(-rotation_angle_rad, rotation_angle_rad)
 
     # 3. MOVE: Calculate the new position one step along the new heading

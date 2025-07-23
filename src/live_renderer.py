@@ -18,9 +18,8 @@ class LiveRenderer:
             print(f"Error setting up font: {e}")
             self.font_path = None
             self.base_font_size = 50
-            
-    # --- MODIFIED: Added show_pheromones parameter with a default value ---
-    def draw(self, screen, sim, vfx_manager, viewport, show_pheromones=True):
+
+    def draw(self, screen, sim, vfx_manager, viewport, show_pheromones=True, selection_ui_elements=None, current_mode='SIMULATION', selected_object=None):
         if viewport.rect.width <= 0 or viewport.rect.height <= 0:
             return
 
@@ -28,43 +27,29 @@ class LiveRenderer:
         viewport_surface.fill((10, 10, 15))
 
         # --- 1. Draw Simulation Grid & Trails ---
-        # Draw the main grid of agents and bases first
         rgb_grid = self.color_array[sim.render_grid]
         sim_surface = pygame.surfarray.make_surface(rgb_grid.transpose(1, 0, 2))
         
-        # --- MODIFIED: This entire block is now conditional ---
         if show_pheromones:
-            surface_dims = (sim.grid_size[1], sim.grid_size[0])
-            trail_surface = pygame.Surface(surface_dims, pygame.SRCALPHA)
-            rgb_view = pygame.surfarray.pixels3d(trail_surface)
-            alpha_view = pygame.surfarray.pixels_alpha(trail_surface)
-            
-            # Use a slightly lower threshold for a more visible but still clean look
-            red_mask = sim.red_pheromone > 0.05
-            blue_mask = sim.blue_pheromone > 0.05
-            
-            rgb_view[red_mask.T] = COLOR_MAP[RED_BASE_ARMOR][:3]
-            alpha_view[red_mask.T] = 150
-            rgb_view[blue_mask.T] = COLOR_MAP[BLUE_BASE_ARMOR][:3]
-            alpha_view[blue_mask.T] = 150
-            
-            del rgb_view
-            del alpha_view
-            
-            # Blend the trails on top of the main simulation surface
-            sim_surface.blit(trail_surface, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+            # Blit the pre-rendered, cached pheromone surfaces
+            sim_surface.blit(sim.red_pheromone_surface, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+            sim_surface.blit(sim.blue_pheromone_surface, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
 
         # --- 2. Scale and Position the Simulation ---
-        scaled_w = int(sim_surface.get_width() * viewport.zoom * PIXEL_SCALE)
-        scaled_h = int(sim_surface.get_height() * viewport.zoom * PIXEL_SCALE)
-        draw_x, draw_y = 0, 0
+        if current_mode == 'EDITOR':
+            scaled_w = viewport.rect.width
+            scaled_h = viewport.rect.height
+            draw_x, draw_y = 0, 0
+        else:
+            scaled_w = int(sim_surface.get_width() * viewport.zoom * PIXEL_SCALE)
+            scaled_h = int(sim_surface.get_height() * viewport.zoom * PIXEL_SCALE)
         
         if scaled_w > 0 and scaled_h > 0:
             scaled_sim_surface = pygame.transform.scale(sim_surface, (scaled_w, scaled_h))
             draw_x = -viewport.offset_x * viewport.zoom * PIXEL_SCALE
             draw_y = -viewport.offset_y * viewport.zoom * PIXEL_SCALE
             viewport_surface.blit(scaled_sim_surface, (draw_x, draw_y))
-
+        
         # --- 3. Draw YouTube Shorts Overlay ---
         if scaled_w > 0 and scaled_h > 0:
             on_screen_scale = scaled_h / VIDEO_GAME_AREA_HEIGHT
@@ -98,8 +83,21 @@ class LiveRenderer:
                 if 0 <= screen_x < viewport.rect.width and 0 <= screen_y < viewport.rect.height:
                     alpha = int(255 * (p.lifespan / p.max_lifespan))
                     color = p.color[:3]
-                    particle_surf = pygame.Surface((PIXEL_SCALE * viewport.zoom, PIXEL_SCALE * viewport.zoom), pygame.SRCALPHA)
+                    
+                    # Make particles smaller and always visible
+                    size = max(1.0, PIXEL_SCALE * viewport.zoom * 0.5)
+
+                    particle_surf = pygame.Surface((size, size), pygame.SRCALPHA)
                     particle_surf.fill((*color, alpha))
                     viewport_surface.blit(particle_surf, (int(screen_x), int(screen_y)))
+        
+        if selection_ui_elements and 'spawn_markers' in selection_ui_elements:
+            for y, x in selection_ui_elements['spawn_markers']:
+                # Convert world coordinates to screen coordinates
+                screen_x = (x - viewport.offset_x) * viewport.zoom * PIXEL_SCALE
+                screen_y = (y - viewport.offset_y) * viewport.zoom * PIXEL_SCALE
+                
+                if 0 <= screen_x < viewport.rect.width and 0 <= screen_y < viewport.rect.height:
+                    pygame.draw.circle(viewport_surface, (255, 255, 0), (screen_x, screen_y), 5, 2) 
 
         screen.blit(viewport_surface, viewport.rect.topleft)

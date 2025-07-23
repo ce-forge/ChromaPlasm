@@ -5,13 +5,13 @@
     "fps": 30
   },
   "engine_settings": {
-    "pheromone_decay_rate": 0.98,
-    "pheromone_deposit_amount": 1.0,
-    "pheromone_blur_sigma": 0.5,
-    "sensor_angle_degrees": 35.0,
-    "sensor_distance": 12.0,
-    "rotation_angle_degrees": 35.0,
-    "combat_chance": 0.25
+    "pheromone_decay_rate": 0.99,
+    "pheromone_deposit_amount": 150.0,
+    "pheromone_blur_sigma": 2.5,
+    "sensor_angle_degrees": 45.0,
+    "sensor_distance": 15.0,
+    "rotation_angle_degrees": 22.5,
+    "combat_chance": 0.6
   },
   "spawning_settings": {
     "spawn_rate": 2,

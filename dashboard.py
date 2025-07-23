@@ -75,19 +75,28 @@ class Dashboard:
         for team_name, team_color in [('blue', '#96b4ff'), ('red', '#ff9696')]:
             self.team_stat_labels[team_name] = {
                 'title': pygame_gui.elements.UILabel(relative_rect=pygame.Rect(x_offset, 0, label_width, 20), text=f'{team_name.upper()} TEAM', manager=self.ui_manager, container=self.stats_panel, object_id=f'@{team_color}'),
-                'agents': pygame_gui.elements.UILabel(relative_rect=pygame.Rect(x_offset, 20, label_width, 15), text='Agents: 0', manager=self.ui_manager, container=self.stats_panel),
-                'health': pygame_gui.elements.UILabel(relative_rect=pygame.Rect(x_offset, 35, label_width, 15), text='Base Health: 0', manager=self.ui_manager, container=self.stats_panel)
+                # MODIFIED: Changed height from 15 to 20
+                'agents': pygame_gui.elements.UILabel(relative_rect=pygame.Rect(x_offset, 20, label_width, 20), text='Agents: 0', manager=self.ui_manager, container=self.stats_panel),
+                # MODIFIED: Changed height from 15 to 20 and adjusted y-offset
+                'health': pygame_gui.elements.UILabel(relative_rect=pygame.Rect(x_offset, 40, label_width, 20), text='Base Health: 0', manager=self.ui_manager, container=self.stats_panel)
             }
             x_offset += label_width + 10
             
         content_width = DASHBOARD_RIGHT_PANEL_WIDTH - 20 
-        self.global_params_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, 280), manager=self.ui_manager, container=self.right_params_panel)
+        # MODIFIED: Increased height of the global params container to fit new sliders
+        self.global_params_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, 385), manager=self.ui_manager, container=self.right_params_panel)
         pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 5, content_width - 20, 30), text="-- GLOBAL SETTINGS --", manager=self.ui_manager, container=self.global_params_container)
         
         y_offset_params = 40
+        # MODIFIED: Added new parameters to the UI
         global_params = {
-            'sensor_angle_degrees': (10.0, 45.0), 'sensor_distance': (2.0, 20.0), 
-            'rotation_angle_degrees': (10.0, 45.0), 'combat_chance': (0.0, 1.0)
+            'sensor_angle_degrees': (10.0, 45.0), 
+            'sensor_distance': (2.0, 20.0), 
+            'rotation_angle_degrees': (10.0, 45.0), 
+            'combat_chance': (0.0, 1.0),
+            'pheromone_decay_rate': (0.8, 1.0),
+            'pheromone_blur_sigma': (0.0, 3.0),
+            'pheromone_deposit_amount': (0.1, 200.0)
         }
         for key, (start, end) in global_params.items():
             pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset_params, 220, 25), text=f"{key}:", manager=self.ui_manager, container=self.global_params_container)
@@ -96,7 +105,7 @@ class Dashboard:
             self.global_ui_elements[key] = slider
             y_offset_params += 35
 
-        self.selection_params_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 290, content_width, 400), manager=self.ui_manager, container=self.right_params_panel)
+        self.selection_params_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 405, content_width, 400), manager=self.ui_manager, container=self.right_params_panel)
         self.selection_ui_elements['title'] = pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 5, content_width - 20, 30), text="NOTHING SELECTED", manager=self.ui_manager, container=self.selection_params_container)
         self.selection_params_container.hide()
 
@@ -108,9 +117,8 @@ class Dashboard:
             labels['health'].set_text(f'Base Health: {base_health}')
 
     def update_selection_panel(self):
-        """Creates, destroys, or updates UI elements based on the current selection."""
         for key, element in list(self.selection_ui_elements.items()):
-            if key != 'title':
+            if key not in ['title', 'spawn_markers']: # Keep markers
                 element.kill()
                 del self.selection_ui_elements[key]
         
@@ -118,20 +126,29 @@ class Dashboard:
             self.selection_params_container.show()
             base = self.selected_object
             self.selection_ui_elements['title'].set_text(f"BASE: {base.shape_name} ({base.team.upper()})")
+            
+            # Update the spawn markers for the renderer
+            self.selection_ui_elements['spawn_markers'] = base.exit_ports
+
             y_offset = 40
-            editable_params = [
-                'spawn_rate', 'units_per_spawn', 'pheromone_deposit_amount', 
-                'sensor_angle_degrees', 'sensor_distance', 'rotation_angle_degrees'
-            ]
+            num_ports = len(base.exit_ports)
+            self.selection_ui_elements['spawns_label'] = pygame_gui.elements.UILabel(
+                relative_rect=pygame.Rect(10, y_offset, 380, 30),
+                text=f"Available Spawn Points: {num_ports}",
+                manager=self.ui_manager, container=self.selection_params_container)
+            y_offset += 40
+
+            editable_params = ['spawn_rate', 'units_per_spawn'] # Simplified for clarity
             for key in editable_params:
                 current_value = self.simulation.get_param(base.team, key)
                 pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, 220, 30), text=f"{key}:", manager=self.ui_manager, container=self.selection_params_container)
                 entry = pygame_gui.elements.UITextEntryLine(relative_rect=pygame.Rect(230, y_offset, 150, 30), manager=self.ui_manager, container=self.selection_params_container, object_id=f"#base_{key}_entry")
-                entry.set_text(f"{current_value:.3f}" if isinstance(current_value, float) else str(current_value))
+                entry.set_text(str(current_value))
                 self.selection_ui_elements[key] = entry
                 y_offset += 40
         else:
-            self.selection_params_container.hide()   
+            self.selection_params_container.hide()
+            self.selection_ui_elements['spawn_markers'] = []
 
     def handle_events(self):
         time_delta = self.clock.tick(60) / 1000.0
@@ -156,6 +173,7 @@ class Dashboard:
                     if grid_pos: self.select_object_at(grid_pos[0], grid_pos[1])
                     else:
                         self.selected_object = None
+                        self.selection_ui_elements['spawn_markers'] = [] 
                         self.update_selection_panel()
         return time_delta
     
@@ -178,9 +196,14 @@ class Dashboard:
         # Re-initialize the simulation object to reset everything
         self.simulation = Simulation(self.config, self.vfx_manager, self.audio_manager)
         self.vfx_manager.particles.clear()
+        
+        # Access the .grid attribute inside the PheromoneManager to fill it
+        self.simulation.red_pheromones.grid.fill(0)
+        self.simulation.blue_pheromones.grid.fill(0)
+        
         self.selected_object = None
         self.update_selection_panel()
-        self.frame_count = 0 
+        self.frame_count = 0
 
     def handle_slider_move(self, slider):
         if slider.object_ids[-1].endswith('_slider'):
@@ -196,7 +219,8 @@ class Dashboard:
             key = entry_line.object_ids[-1].replace('#base_', '').replace('_entry', '')
             try:
                 new_value = float(entry_line.get_text())
-                if 'degrees' not in key: new_value = int(new_value)
+                if 'degrees' not in key and 'rate' not in key and 'amount' not in key and 'distance' not in key:
+                    new_value = int(new_value)
                 self.simulation.team_params_overrides[base.team][key] = new_value
                 self.simulation._compile_team_params()
                 print(f"Set override for {base.team} base: '{key}' to {new_value}")
@@ -236,7 +260,8 @@ class Dashboard:
             
             if not self.is_paused:
                 for _ in range(self.sim_speed):
-                    self.simulation.step()
+                    # MODIFIED: Pass the frame count to the step method
+                    self.simulation.step(self.frame_count)
                     self.vfx_manager.update_effects()
                     self.frame_count += 1
             
@@ -245,7 +270,7 @@ class Dashboard:
             
             self.screen.fill((25, 25, 35))
             # --- MODIFIED: Pass the new state flag to the renderer ---
-            self.renderer.draw(self.screen, self.simulation, self.vfx_manager, self.viewport, self.show_pheromones)
+            self.renderer.draw(self.screen, self.simulation, self.vfx_manager, self.viewport, self.show_pheromones, self.selection_ui_elements)
             self.ui_manager.draw_ui(self.screen)
             
             pygame.display.flip()
