@@ -27,6 +27,21 @@ class Base:
         self.recalculate_geometry()
         self.spawn_cooldown = 0
 
+        # In base.py, inside the Base class
+    def update_attributes(self, team=None, shape_name=None):
+        """Updates core properties of the base and recalculates its geometry."""
+        should_recalculate = False
+        if team and self.team != team:
+            self.team = team
+            should_recalculate = True
+        if shape_name and self.shape_name != shape_name:
+            self.shape_name = shape_name
+            self.core_template = self._get_shape_template(shape_name)
+            should_recalculate = True
+        
+        if should_recalculate:
+            self.recalculate_geometry()
+
     def _bresenham_line(self, y1, x1, y2, x2):
         dx, dy = abs(x2 - x1), abs(y2 - y1)
         sx, sy = 1 if x1 < x2 else -1, 1 if y1 < y2 else -1

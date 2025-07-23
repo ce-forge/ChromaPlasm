@@ -256,3 +256,34 @@ class Simulation:
             y, x = int(self.agent_positions[i, 0]), int(self.agent_positions[i, 1])
             if 0 <= y < self.grid_size[0] and 0 <= x < self.grid_size[1]:
                 self.render_grid[y, x] = RED_SOLDIER if self.agent_teams[i] == 0 else BLUE_SOLDIER
+
+    # In simulation.py, inside the Simulation class
+    def reset_dynamic_state(self):
+        """Resets agents and pheromones but preserves the base layout."""
+        self.agent_positions.fill(0)
+        self.agent_headings.fill(0)
+        self.agent_teams.fill(0)
+        self.agent_health.fill(0)
+        self.agent_count = 0
+        self.red_pheromones.grid.fill(0)
+        self.blue_pheromones.grid.fill(0)
+        self.draw_bases_to_grid() # Redraw the preserved bases onto a clean grid
+
+    def add_new_base(self, team='blue', shape_name='BOX'):
+        """Adds a new default base to the center of the grid."""
+        grid_h, grid_w = self.grid_size
+        new_base = Base(team, grid_h // 2, grid_w // 2, shape_name, self.config, scale=8.0, 
+                        core_thickness=1, armor_thickness=2, grid_h=grid_h, grid_w=grid_w)
+        self.bases.append(new_base)
+
+    def delete_base(self, base_to_delete):
+        """Removes a selected base."""
+        if base_to_delete and base_to_delete in self.bases:
+            self.bases.remove(base_to_delete)
+
+    def get_base_at(self, world_y, world_x):
+        """Finds which base, if any, occupies a given coordinate."""
+        for base in reversed(self.bases):
+            if hasattr(base, 'all_base_pixels') and (world_y, world_x) in base.all_base_pixels:
+                return base
+        return None
