@@ -6,12 +6,19 @@ from src.constants import *
 class LiveRenderer:
     def __init__(self, config):
         self.config = config
-        max_key = max(COLOR_MAP.keys())
-        self.color_array = np.array([COLOR_MAP.get(i, (0,0,0))[:3] for i in range(max_key + 1)], dtype=np.uint8)
+        
+        # --- DYNAMIC COLOR MAP GENERATION ---
+        # Find the highest ID in our dynamically generated COLOR_MAP
+        max_key = max(COLOR_MAP.keys()) if COLOR_MAP else 0
+        
+        # Create a numpy array that can hold all possible colors.
+        # It gets the color for each ID, defaulting to black if an ID is missing.
+        self.color_array = np.array([COLOR_MAP.get(i, (0,0,0,0))[:3] for i in range(max_key + 1)], dtype=np.uint8)
+        
         try:
             self.font_path = config.font_path
             self.base_font_size = config.font_size
-        except Exception:
+        except AttributeError:
             self.font_path = None
             self.base_font_size = 50
 
@@ -23,14 +30,14 @@ class LiveRenderer:
         viewport_surface = pygame.Surface(viewport.rect.size)
         viewport_surface.fill((10, 10, 15))
 
-        # --- UNIFIED RENDERING LOGIC ---
-        # Always render from the simulation's main grid.
+        # Use the new dynamic color_array to render the main grid
         rgb_grid = self.color_array[sim.render_grid]
         sim_surface = pygame.surfarray.make_surface(rgb_grid.transpose(1, 0, 2))
         
+        # --- MODIFICATION: Loop through and draw ALL pheromone surfaces ---
         if show_pheromones:
-            sim_surface.blit(sim.red_pheromone_surface, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
-            sim_surface.blit(sim.blue_pheromone_surface, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+            for surface in sim.pheromone_surfaces.values():
+                sim_surface.blit(surface, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
 
         scaled_w = int(sim_surface.get_width() * viewport.zoom * PIXEL_SCALE)
         scaled_h = int(sim_surface.get_height() * viewport.zoom * PIXEL_SCALE)
@@ -42,7 +49,6 @@ class LiveRenderer:
             draw_y = -viewport.offset_y * viewport.zoom * PIXEL_SCALE
             viewport_surface.blit(scaled_sim_surface, (draw_x, draw_y))
         
-        # --- FIX FOR ISSUE 4: Draw Shorts Overlay in ALL modes ---
         if scaled_w > 0 and scaled_h > 0:
             on_screen_scale = scaled_h / VIDEO_GAME_AREA_HEIGHT
             scaled_top_margin_h = VIDEO_TOP_MARGIN * on_screen_scale
@@ -61,12 +67,10 @@ class LiveRenderer:
                 try: title_font = pygame.font.Font(self.font_path, dynamic_font_size)
                 except (FileNotFoundError, TypeError): title_font = pygame.font.Font(None, dynamic_font_size)
                 
-                # Use the title_text passed from the dashboard
                 title_text_surf = title_font.render(title_text, True, (255, 255, 255))
                 text_rect = title_text_surf.get_rect(center=top_margin_rect.center)
                 viewport_surface.blit(title_text_surf, text_rect)
 
-        # --- Editor Overlays ---
         if is_editing_spawns and selected_object:
             for y, x in selected_object.exit_ports:
                 screen_x = (x - viewport.offset_x) * viewport.zoom * PIXEL_SCALE
@@ -74,7 +78,6 @@ class LiveRenderer:
                 if 0 <= screen_x < viewport.rect.width and 0 <= screen_y < viewport.rect.height:
                     pygame.draw.circle(viewport_surface, (255, 255, 0), (screen_x, screen_y), 6, 2)
         
-        # --- VFX Drawing (unchanged) ---
         for p in vfx_manager.particles:
             if hasattr(p, 'y') and p.y is not None:
                 screen_x = (p.x - viewport.offset_x) * viewport.zoom * PIXEL_SCALE

@@ -1,7 +1,7 @@
 {
     "initial_layout": [
         {
-            "team": "blue",
+            "team": "Azure",
             "shape_name": "ARROWHEAD",
             "pivot": [
                 360,
@@ -12,17 +12,21 @@
             "armor_thickness": 2,
             "exit_ports": [
                 [
-                    272,
-                    134
+                    327,
+                    90
                 ],
                 [
-                    346,
-                    132
+                    400,
+                    131
+                ],
+                [
+                    327,
+                    169
                 ]
             ]
         },
         {
-            "team": "red",
+            "team": "Crimson",
             "shape_name": "N",
             "pivot": [
                 370,
@@ -41,96 +45,47 @@
                     426
                 ]
             ]
+        },
+        {
+            "team": "Amethyst",
+            "shape_name": "BOX",
+            "pivot": [
+                210,
+                390
+            ],
+            "scale": 8.0,
+            "core_thickness": 1,
+            "armor_thickness": 2,
+            "exit_ports": [
+                [
+                    172,
+                    355
+                ],
+                [
+                    172,
+                    385
+                ],
+                [
+                    248,
+                    355
+                ],
+                [
+                    248,
+                    385
+                ],
+                [
+                    185,
+                    352
+                ],
+                [
+                    205,
+                    352
+                ],
+                [
+                    235,
+                    352
+                ]
+            ]
         }
-    ],
-    "shape_templates": {
-        "ARROWHEAD": {
-            "exit_ports": [
-                [
-                    -31,
-                    39
-                ],
-                [
-                    39,
-                    1
-                ],
-                [
-                    -32,
-                    -38
-                ]
-            ],
-            "scale": 8.0,
-            "core_thickness": 1,
-            "armor_thickness": 2
-        },
-        "BOX": {
-            "exit_ports": [
-                [
-                    -38,
-                    -35
-                ],
-                [
-                    -38,
-                    -5
-                ],
-                [
-                    38,
-                    -35
-                ],
-                [
-                    38,
-                    -5
-                ],
-                [
-                    -25,
-                    -38
-                ],
-                [
-                    -5,
-                    -38
-                ],
-                [
-                    25,
-                    -38
-                ]
-            ],
-            "scale": 8.0,
-            "core_thickness": 1,
-            "armor_thickness": 2
-        },
-        "N": {
-            "exit_ports": [
-                [
-                    39,
-                    -15
-                ],
-                [
-                    -37,
-                    16
-                ]
-            ],
-            "scale": 8.0,
-            "core_thickness": 1,
-            "armor_thickness": 2
-        },
-        "Y": {
-            "exit_ports": [
-                [
-                    -36,
-                    -29
-                ],
-                [
-                    -36,
-                    30
-                ],
-                [
-                    38,
-                    1
-                ]
-            ],
-            "scale": 8.0,
-            "core_thickness": 1,
-            "armor_thickness": 2
-        }
-    }
+    ]
 }

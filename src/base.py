@@ -5,12 +5,27 @@ from src.constants import *
 import json
 
 class Base:
-    def __init__(self, team, pivot_y, pivot_x, shape_name, config, grid_h, grid_w):
-        self.team = team
+    def __init__(self, team_name, pivot_y, pivot_x, shape_name, config, grid_h, grid_w):
+        # --- COMPATIBILITY FIX ---
+        # If an old team name is loaded from a file, convert it to the new name.
+        if team_name.lower() == 'red':
+            team_name = 'Crimson'
+        elif team_name.lower() == 'blue':
+            team_name = 'Azure'
+        
+        self.team_name = team_name
+        self.team_id = TEAM_NAME_TO_ID.get(team_name.lower())
+        
+        # Failsafe: If team_id is STILL None (e.g., from a typo in the JSON), default to the first team.
+        if self.team_id is None:
+            print(f"WARNING: Base created with unknown team name '{team_name}'. Defaulting to team 0.")
+            self.team_name = TEAM_ID_TO_NAME.get(0, "Default")
+            self.team_id = 0
+        
         self.pivot = (pivot_y, pivot_x)
         self.shape_name = shape_name
         self.config = config
-        self.id = f"{team}_{shape_name}_{pivot_y}_{pivot_x}"
+        self.id = f"{self.team_name}_{shape_name}_{pivot_y}_{pivot_x}"
         self.grid_h, self.grid_w = grid_h, grid_w
 
         self.scale = 8.0
@@ -26,7 +41,6 @@ class Base:
 
     @property
     def exit_ports(self):
-        """Dynamically calculates the absolute world coordinates of the exit ports."""
         return [(self.pivot[0] + dy, self.pivot[1] + dx) for dy, dx in self._relative_exit_ports]
 
     def _bresenham_line(self, y1, x1, y2, x2):
@@ -136,8 +150,11 @@ class Base:
                     self._relative_exit_ports = [tuple(p) for p in template_data.get('exit_ports', [])]
         except (FileNotFoundError, json.JSONDecodeError): pass
 
-    def update_attributes(self, team=None, shape_name=None):
-        if team: self.team = team
+    def update_attributes(self, team_name=None, shape_name=None):
+        if team_name:
+            self.team_name = team_name
+            self.team_id = TEAM_NAME_TO_ID.get(team_name.lower())
+        
         if shape_name and self.shape_name != shape_name:
             self.shape_name = shape_name
             self.core_template = self._get_shape_template(shape_name)
@@ -147,25 +164,18 @@ class Base:
     def update_spawning(self, sim):
         self.spawn_cooldown -= 1
         if self.spawn_cooldown <= 0:
-            units_to_spawn = int(sim.get_param(self.team, 'units_per_spawn'))
+            # --- MODIFICATION: Use team_id for parameters ---
+            units_to_spawn = int(sim.get_param(self.team_id, 'units_per_spawn'))
                         
-            # 1. Get a list of all physically available spawn points.
-            open_ports = [
-                (y, x) for y, x in self.exit_ports
-                if 0 <= y < SIM_HEIGHT and 0 <= x < SIM_WIDTH
-            ]
+            open_ports = [(y, x) for y, x in self.exit_ports if 0 <= y < SIM_HEIGHT and 0 <= x < SIM_WIDTH]
             
-            # If the base has no valid spawn points left, do nothing.
             if not open_ports:
-                self.spawn_cooldown = int(sim.get_param(self.team, 'spawn_rate'))
+                self.spawn_cooldown = int(sim.get_param(self.team_id, 'spawn_rate'))
                 return
 
-            # 2. Loop for the number of units we WANT to spawn.
             for _ in range(units_to_spawn):
-                # 3. For each unit, pick a random available port, allowing reuse.
                 spawn_y, spawn_x = random.choice(open_ports)
-                
-                # 4. Create the agent in the data arrays. Overlapping is allowed.
-                sim.add_soldier(spawn_y, spawn_x, self.team, np.random.uniform(0, 2 * np.pi))
+                # --- MODIFICATION: Pass team_id to create agents ---
+                sim.add_soldier(spawn_y, spawn_x, self.team_id, np.random.uniform(0, 2 * np.pi))
             
-            self.spawn_cooldown = int(sim.get_param(self.team, 'spawn_rate'))
+            self.spawn_cooldown = int(sim.get_param(self.team_id, 'spawn_rate'))
