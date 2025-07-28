@@ -66,19 +66,17 @@ class Dashboard:
         bottom_panel_rect = pygame.Rect(0, DASHBOARD_HEIGHT - DASHBOARD_BOTTOM_PANEL_HEIGHT, DASHBOARD_WIDTH - DASHBOARD_RIGHT_PANEL_WIDTH, DASHBOARD_BOTTOM_PANEL_HEIGHT)
         self.bottom_controls_panel = pygame_gui.elements.UIPanel(relative_rect=bottom_panel_rect, manager=self.ui_manager, object_id='#bottom_panel')
 
-        # --- MODIFIED: Bottom Panel Controls with Text Labels ---
+        # Bottom Panel Controls
         self.play_pause_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 10, 90, 60), text='PAUSE', manager=self.ui_manager, container=self.bottom_controls_panel)
         self.speed_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(110, 10, 60, 60), text='1x', manager=self.ui_manager, container=self.bottom_controls_panel)
         self.reset_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(180, 10, 90, 60), text='RESET', manager=self.ui_manager, container=self.bottom_controls_panel)
-        
-        # Adjusting positions of other buttons to accommodate new sizes
         self.toggle_pheromones_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(280, 10, 180, 30), text='Pheromones: ON', manager=self.ui_manager, container=self.bottom_controls_panel)
         self.toggle_editor_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(280, 40, 180, 30), text='Enter Editor', manager=self.ui_manager, container=self.bottom_controls_panel)
         
-        # Stats Panel (adjusting position)
+        # Stats Panel
         stats_panel_rect = pygame.Rect(470, 10, 840, 60)
         self.stats_panel = pygame_gui.elements.UIPanel(relative_rect=stats_panel_rect, manager=self.ui_manager, container=self.bottom_controls_panel)
-        x_offset = 10; label_width = 400 # Adjusted width slightly
+        x_offset = 10; label_width = 400
         for team_name, team_color in [('blue', '#96b4ff'), ('red', '#ff9696')]:
             self.team_stat_labels[team_name] = {
                 'title': pygame_gui.elements.UILabel(relative_rect=pygame.Rect(x_offset, 0, label_width, 20), text=f'{team_name.upper()} TEAM', manager=self.ui_manager, container=self.stats_panel, object_id=f'@{team_color}'),
@@ -87,15 +85,22 @@ class Dashboard:
             }
             x_offset += label_width + 10
             
-        # Right Panel Layout (Unchanged)
+        # Right Panel Layout
         content_width = DASHBOARD_RIGHT_PANEL_WIDTH - 20
-        self.editor_controls_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, 220), manager=self.ui_manager, container=self.right_panel)
+        
+        # 1. Editor Controls
+        self.editor_controls_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, 270), manager=self.ui_manager, container=self.right_panel)
         pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 5, content_width - 20, 30), text="-- SCENE EDITOR --", manager=self.ui_manager, container=self.editor_controls_container)
         self.editor_add_base_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 40, content_width - 20, 40), text="Add New Base", manager=self.ui_manager, container=self.editor_controls_container)
         self.editor_delete_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 90, content_width - 20, 40), text="Delete Selected Base", manager=self.ui_manager, container=self.editor_controls_container)
-        pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 140, content_width - 20, 30), text="Shorts Title:", manager=self.ui_manager, container=self.editor_controls_container)
-        self.editor_title_entry = pygame_gui.elements.UITextEntryLine(relative_rect=pygame.Rect(10, 170, content_width - 20, 40), manager=self.ui_manager, container=self.editor_controls_container)
+        
+        self.save_layout_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 140, content_width - 20, 40), text="Save Layout as Default", manager=self.ui_manager, container=self.editor_controls_container)
+
+        pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 190, content_width - 20, 30), text="Shorts Title:", manager=self.ui_manager, container=self.editor_controls_container)
+        self.editor_title_entry = pygame_gui.elements.UITextEntryLine(relative_rect=pygame.Rect(10, 220, content_width - 20, 40), manager=self.ui_manager, container=self.editor_controls_container)
         self.editor_title_entry.set_text(self.shorts_title_text)
+
+        # 2. Global Sim Settings
         self.global_params_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, 385), manager=self.ui_manager, container=self.right_panel)
         pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 5, content_width - 20, 30), text="-- GLOBAL SETTINGS --", manager=self.ui_manager, container=self.global_params_container)
         y_offset_params = 40
@@ -105,7 +110,10 @@ class Dashboard:
             slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(230, y_offset_params, content_width - 250, 25), start_value=getattr(self.config, key), value_range=[start, end], manager=self.ui_manager, container=self.global_params_container, object_id=f"#{key}_slider")
             self.global_ui_elements[key] = slider
             y_offset_params += 35
+
+        # 3. Contextual Selection Panel
         self.selection_params_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 405, content_width, 400), manager=self.ui_manager, container=self.right_panel)
+        
         self.toggle_editor_mode(initial=True)
 
     def toggle_editor_mode(self, initial=False):
@@ -136,56 +144,47 @@ class Dashboard:
 
     def update_selection_panel(self):
         if self.selection_params_container and self.selection_params_container.get_container():
-            for element in self.selection_params_container.get_container().elements[:]:
-                element.kill()
+            for element in self.selection_params_container.get_container().elements[:]: element.kill()
         self.selection_ui_elements = {}
-        
         if not self.selected_object:
-            self.selection_params_container.hide()
-            return
+            self.selection_params_container.hide(); return
         
         self.selection_params_container.show()
         base = self.selected_object
         content_width = self.selection_params_container.get_container().get_rect().width
         y_offset = 5
-
         title_text = f"BASE: {base.shape_name} ({base.team.upper()})"
         if self.is_editing_spawns: title_text = f"EDITING SPAWNS for {base.shape_name}"
         self.selection_ui_elements['title'] = pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, content_width - 20, 30), text=title_text, manager=self.ui_manager, container=self.selection_params_container)
         y_offset += 35
-
         if self.current_mode == 'SIMULATION':
             editable_params = ['spawn_rate', 'units_per_spawn']
             for key in editable_params:
                 pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, 220, 30), text=f"{key}:", manager=self.ui_manager, container=self.selection_params_container)
                 entry = pygame_gui.elements.UITextEntryLine(relative_rect=pygame.Rect(230, y_offset, 150, 30), manager=self.ui_manager, container=self.selection_params_container, object_id=f"#base_{key}_entry")
-                entry.set_text(str(self.simulation.get_param(base.team, key)))
-                self.selection_ui_elements[key] = entry
+                entry.set_text(str(self.simulation.get_param(base.team, key))); self.selection_ui_elements[key] = entry
                 y_offset += 40
         else: # EDITOR Mode
             pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, 100, 30), text="Team:", manager=self.ui_manager, container=self.selection_params_container)
             self.selection_ui_elements['team_dropdown'] = pygame_gui.elements.UIDropDownMenu(options_list=['red', 'blue'], starting_option=base.team, relative_rect=pygame.Rect(120, y_offset, content_width - 130, 30), manager=self.ui_manager, container=self.selection_params_container)
             y_offset += 40
-
             pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, 100, 30), text="Shape:", manager=self.ui_manager, container=self.selection_params_container)
             self.selection_ui_elements['shape_dropdown'] = pygame_gui.elements.UIDropDownMenu(options_list=['Y', 'N', 'BOX', 'ARROWHEAD'], starting_option=base.shape_name, relative_rect=pygame.Rect(120, y_offset, content_width - 130, 30), manager=self.ui_manager, container=self.selection_params_container)
             y_offset += 50
-            
-            btn_text = "Save Spawns" if self.is_editing_spawns else "Modify Spawns"
+            btn_text = "Return to Base Edit" if self.is_editing_spawns else "Modify Spawn Ports"
             self.selection_ui_elements['modify_spawns_button'] = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, y_offset, content_width - 20, 40), text=btn_text, manager=self.ui_manager, container=self.selection_params_container)
             y_offset += 45
-            
             if self.is_editing_spawns:
                 self.selection_ui_elements['modify_spawns_button'].select()
-
                 button_width = (content_width - 30) // 2
                 add_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, y_offset, button_width, 30), text="Add Port", manager=self.ui_manager, container=self.selection_params_container)
                 del_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(20 + button_width, y_offset, button_width, 30), text="Delete Port", manager=self.ui_manager, container=self.selection_params_container)
-                self.selection_ui_elements['add_port_button'] = add_button
-                self.selection_ui_elements['delete_port_button'] = del_button
-
+                self.selection_ui_elements['add_port_button'] = add_button; self.selection_ui_elements['delete_port_button'] = del_button
+                y_offset += 35
                 if self.editor_port_mode == 'ADD': add_button.select()
                 elif self.editor_port_mode == 'DELETE': del_button.select()
+                template_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, y_offset, content_width - 20, 30), text="Save Port Layout as Default", manager=self.ui_manager, container=self.selection_params_container)
+                self.selection_ui_elements['save_ports_button'] = template_button
 
     def handle_events(self):
         time_delta = self.clock.tick(60) / 1000.0
@@ -199,38 +198,30 @@ class Dashboard:
                 elif event.ui_element == self.reset_button: self.reset_simulation()
                 elif event.ui_element == self.toggle_pheromones_button: self.toggle_pheromone_display()
                 elif event.ui_element == self.toggle_editor_button: self.toggle_editor_mode()
+                elif event.ui_element == self.save_layout_button: self.save_layout_to_file()
                 elif event.ui_element == self.editor_add_base_button:
-                    new_base = self.simulation.add_new_base()
-                    self.selected_object = new_base
-                    self.is_editing_spawns = False # Ensure we are in base-editing mode
-                    self.editor_port_mode = 'DRAG'
-                    self.update_selection_panel()
+                    new_base = self.simulation.add_new_base(); self.selected_object = new_base
+                    self.is_editing_spawns = False; self.editor_port_mode = 'DRAG'; self.update_selection_panel()
                 elif event.ui_element == self.editor_delete_button: 
-                    self.simulation.delete_base(self.selected_object)
-                    self.selected_object = None
-                    self.update_selection_panel()
-                
+                    self.simulation.delete_base(self.selected_object); self.selected_object = None; self.update_selection_panel()
                 if self.selected_object:
+                    if event.ui_element == self.selection_ui_elements.get('save_ports_button'): self.save_port_layout_as_default()
                     if event.ui_element == self.selection_ui_elements.get('modify_spawns_button'):
-                        self.is_editing_spawns = not self.is_editing_spawns
-                        self.editor_port_mode = 'DRAG' # Always reset to drag mode
-                        self.update_selection_panel()
-                    
+                        self.is_editing_spawns = not self.is_editing_spawns; self.editor_port_mode = 'DRAG'; self.update_selection_panel()
                     if self.is_editing_spawns:
                         if event.ui_element == self.selection_ui_elements.get('add_port_button'):
-                            self.editor_port_mode = 'DRAG' if self.editor_port_mode == 'ADD' else 'ADD'
-                            self.update_selection_panel()
+                            self.editor_port_mode = 'DRAG' if self.editor_port_mode == 'ADD' else 'ADD'; self.update_selection_panel()
                         elif event.ui_element == self.selection_ui_elements.get('delete_port_button'):
-                            self.editor_port_mode = 'DRAG' if self.editor_port_mode == 'DELETE' else 'DELETE'
-                            self.update_selection_panel()
+                            self.editor_port_mode = 'DRAG' if self.editor_port_mode == 'DELETE' else 'DELETE'; self.update_selection_panel()
 
+            # --- THIS SECTION IS NOW CORRECT ---
             if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
                 self.handle_slider_move(event.ui_element)
             
             if event.type == pygame_gui.UI_TEXT_ENTRY_FINISHED:
                 if event.ui_element == self.editor_title_entry:
                     self.shorts_title_text = event.text
-                else:
+                else: # All other text entries are for parameters
                     self.handle_text_entry(event.ui_element)
 
             if event.type == pygame_gui.UI_DROP_DOWN_MENU_CHANGED and self.selected_object:
@@ -251,6 +242,26 @@ class Dashboard:
                             self.select_object_at(grid_pos[0], grid_pos[1]) if grid_pos else self.select_object_at(None, None)
         return time_delta
 
+    def save_port_layout_as_default(self):
+        if not self.selected_object: return
+        base = self.selected_object; shape_name = base.shape_name
+        template_data = {
+            "exit_ports": [list(port) for port in base._relative_exit_ports],
+            "scale": base.scale,
+            "core_thickness": base.core_thickness,
+            "armor_thickness": base.armor_thickness,
+        }
+        try:
+            with open('base_layouts.json', 'r+') as f:
+                data = json.load(f)
+                if 'shape_templates' not in data: data['shape_templates'] = {}
+                data['shape_templates'][shape_name] = template_data
+                f.seek(0); json.dump(data, f, indent=4); f.truncate()
+            print(f"SUCCESS: Default template for shape '{shape_name}' saved.")
+        except Exception as e:
+            print(f"ERROR: Could not save shape template. {e}")
+
+
     def handle_editor_mouse_events(self, event):
         grid_pos = self.viewport.get_grid_pos(event.pos)
         if not grid_pos: return
@@ -258,19 +269,25 @@ class Dashboard:
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.is_editing_spawns and self.selected_object:
+                base = self.selected_object
                 if self.editor_port_mode == 'DELETE':
                     port_to_delete_idx = -1
-                    for i, (port_y, port_x) in enumerate(self.selected_object.exit_ports):
+                    for i, (port_y, port_x) in enumerate(base.exit_ports): # Use the property to get world coords
                         if (world_y - port_y)**2 + (world_x - port_x)**2 < 8**2: port_to_delete_idx = i; break
-                    if port_to_delete_idx != -1: self.selected_object.exit_ports.pop(port_to_delete_idx)
+                    if port_to_delete_idx != -1: base._relative_exit_ports.pop(port_to_delete_idx)
                     return
                 elif self.editor_port_mode == 'ADD':
-                    if (world_y, world_x) not in self.selected_object.all_base_pixels: self.selected_object.exit_ports.append((world_y, world_x))
+                    if (world_y, world_x) not in base.all_base_pixels:
+                        # Convert world coord to relative and store it
+                        rel_y, rel_x = world_y - base.pivot[0], world_x - base.pivot[1]
+                        base._relative_exit_ports.append((rel_y, rel_x))
                     return
-                for i, (port_y, port_x) in enumerate(self.selected_object.exit_ports):
+                for i, (port_y, port_x) in enumerate(base.exit_ports): # Use property for checking
                     if (world_y - port_y)**2 + (world_x - port_x)**2 < 8**2:
-                        self.drag_type, self.dragged_object, self.selected_port_index = 'spawn_port', self.selected_object, i
-                        self.drag_offset = (world_y - port_y, world_x - port_x); return
+                        self.drag_type, self.dragged_object, self.selected_port_index = 'spawn_port', base, i
+                        # Drag offset is now relative to the port's relative position
+                        self.drag_offset = (world_y - port_y, world_x - port_x)
+                        return
             
             clicked_base = self.simulation.get_base_at(world_y, world_x)
             if clicked_base:
@@ -283,20 +300,23 @@ class Dashboard:
                     self.selected_object = None; self.dragged_object = None; self.update_selection_panel()
 
         if event.type == pygame.MOUSEMOTION and self.dragged_object:
-            new_y, new_x = world_y - self.drag_offset[0], world_x - self.drag_offset[1]
             if self.drag_type == 'base':
+                new_y, new_x = world_y - self.drag_offset[0], world_x - self.drag_offset[1]
                 snapped_y = round(new_y / EDITOR_GRID_SNAP_SIZE) * EDITOR_GRID_SNAP_SIZE
                 snapped_x = round(new_x / EDITOR_GRID_SNAP_SIZE) * EDITOR_GRID_SNAP_SIZE
                 self.dragged_object.pivot = (int(snapped_y), int(snapped_x))
-                # --- USE ULTRA-LIGHTWEIGHT PREVIEW ON DRAG ---
                 self.dragged_object.recalculate_preview()
             elif self.drag_type == 'spawn_port':
-                self.dragged_object.exit_ports[self.selected_port_index] = (int(new_y), int(new_x))
+                base = self.dragged_object
+                # The new absolute position of the port
+                new_port_y, new_port_x = world_y - self.drag_offset[0], world_x - self.drag_offset[1]
+                # Convert to relative and update the list
+                rel_y, rel_x = new_port_y - base.pivot[0], new_port_x - base.pivot[1]
+                base._relative_exit_ports[self.selected_port_index] = (int(rel_y), int(rel_x))
 
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             if self.drag_type == 'base' and self.dragged_object:
-                # --- USE HIGH-QUALITY CALCULATION ON RELEASE ---
-                self.dragged_object.recalculate_geometry()
+                self.dragged_object.recalculate_geometry(final_calculation=True, regenerate_ports=False)
             self.dragged_object, self.drag_type, self.selected_port_index = None, None, -1
 
     def run(self):
@@ -329,23 +349,77 @@ class Dashboard:
         pygame.quit()
         sys.exit()
 
+    def save_shape_template_to_file(self):
+        """Saves the selected base's properties as the default for its shape."""
+        if not self.selected_object: return
+        
+        base = self.selected_object
+        shape_name = base.shape_name
+        
+        template_data = {
+            "scale": base.scale,
+            "core_thickness": base.core_thickness,
+            "armor_thickness": base.armor_thickness,
+            "exit_ports": [list(port) for port in base.exit_ports]
+        }
+        
+        try:
+            with open('base_layouts.json', 'r+') as f:
+                data = json.load(f)
+                if 'shape_templates' not in data:
+                    data['shape_templates'] = {}
+                data['shape_templates'][shape_name] = template_data
+                f.seek(0)
+                json.dump(data, f, indent=4)
+                f.truncate()
+            print(f"SUCCESS: Default template for shape '{shape_name}' saved.")
+        except Exception as e:
+            print(f"ERROR: Could not save shape template. {e}")
+
     def select_object_at(self, world_y, world_x):
         clicked_object = self.simulation.get_base_at(world_y, world_x) if world_y is not None else None
         if self.selected_object != clicked_object:
             self.selected_object = clicked_object
             self.is_editing_spawns = False
             self.update_selection_panel()
+
+    def save_layout_to_file(self):
+        """Saves the current arrangement of bases to base_layouts.json."""
+        layout_data = {"initial_layout": []}
+        for base in self.simulation.bases:
+            base_config = {
+                "team": base.team,
+                "shape_name": base.shape_name,
+                "pivot": list(base.pivot),
+                "scale": base.scale,
+                "core_thickness": base.core_thickness,
+                "armor_thickness": base.armor_thickness,
+                "exit_ports": [list(port) for port in base.exit_ports]
+            }
+            layout_data["initial_layout"].append(base_config)
+        
+        try:
+            with open('base_layouts.json', 'w') as f:
+                json.dump(layout_data, f, indent=4)
+            print("SUCCESS: Current base layout saved as default.")
+        except Exception as e:
+            print(f"ERROR: Could not save layout to 'base_layouts.json'. {e}")
             
     def reset_simulation(self):
+        # Restore armor on all bases WITHOUT destroying custom spawn ports.
         for base in self.simulation.bases:
-            base.recalculate_geometry(final_calculation=True)
+            base.recalculate_geometry(final_calculation=True, regenerate_ports=False)
+
+        # Reset the simulation's dynamic state
         self.simulation.reset_dynamic_state()
+        
+        # Reset the dashboard's state
         self.vfx_manager.particles.clear()
         self.frame_count = 0
         if self.current_mode == 'SIMULATION':
             self.is_paused = False
             self.play_pause_button.set_text('PAUSE')
-        print("Simulation reset. Base layout and armor restored.")
+        print("Simulation reset. Base armor restored; custom ports preserved.")
 
     def update_layout(self):
         screen_w, screen_h = self.screen.get_size()
@@ -382,17 +456,23 @@ class Dashboard:
                 self.simulation._compile_team_params()
 
     def handle_text_entry(self, entry_line):
-        if not self.selected_object or not hasattr(self.selected_object, 'shape_name'): return
+        if not self.selected_object or not hasattr(self.selected_object, 'team'): return
         base = self.selected_object
         if entry_line.object_ids[-1].endswith('_entry'):
             key = entry_line.object_ids[-1].replace('#base_', '').replace('_entry', '')
             try:
                 new_value = float(entry_line.get_text())
+                # Ensure spawn parameters are integers
                 if 'rate' in key or 'spawn' in key: new_value = int(new_value)
+                # Update the override for the specific team
+                if base.team not in self.simulation.team_params_overrides:
+                    self.simulation.team_params_overrides[base.team] = {}
                 self.simulation.team_params_overrides[base.team][key] = new_value
                 self.simulation._compile_team_params()
+                print(f"Set {key} for team {base.team} to {new_value}")
             except (ValueError, TypeError):
-                self.update_selection_panel()
+                print(f"Invalid input for {key}. Reverting.")
+                self.update_selection_panel() # Revert to show the last valid value
     
     def update_stats_panel(self):
         for team_name, labels in self.team_stat_labels.items():

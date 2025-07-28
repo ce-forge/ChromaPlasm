@@ -3,6 +3,7 @@ from scipy.ndimage import gaussian_filter
 from numba import jit, prange
 import random
 import pygame
+import json
 
 from src.constants import *
 from src.base import Base
@@ -164,9 +165,47 @@ class Simulation:
         return self.team_params_overrides.get(team, {}).get(key, getattr(self.config, key))
 
     def _initialize_bases(self):
-        grid_h, grid_w = self.grid_size
-        self.bases = [ Base('red', SIM_HEIGHT // 2, int(SIM_WIDTH * 0.8), 'N', self.config, scale=8.0, core_thickness=1, armor_thickness=2, grid_h=grid_h, grid_w=grid_w), Base('blue', SIM_HEIGHT // 2, int(SIM_WIDTH * 0.2), 'Y', self.config, scale=8.0, core_thickness=1, armor_thickness=2, grid_h=grid_h, grid_w=grid_w) ]
-        self.draw_bases_to_grid()
+        """Loads the initial base layout from the JSON file."""
+        self.bases = []
+        try:
+            with open('base_layouts.json', 'r') as f:
+                layout_data = json.load(f)
+
+            for base_config in layout_data.get('initial_layout', []):
+                # Create the base. Its __init__ method now loads the default template for its shape.
+                new_base = Base(
+                    team=base_config['team'],
+                    pivot_y=base_config['pivot'][0],
+                    pivot_x=base_config['pivot'][1],
+                    shape_name=base_config['shape_name'],
+                    config=self.config,
+                    grid_h=self.grid_size[0],
+                    grid_w=self.grid_size[1]
+                )
+
+                # Manually override the template properties with any specific values from the scene file.
+                new_base.scale = base_config.get('scale', new_base.scale)
+                new_base.core_thickness = base_config.get('core_thickness', new_base.core_thickness)
+                new_base.armor_thickness = base_config.get('armor_thickness', new_base.armor_thickness)
+                
+                # --- THIS IS THE CORRECTED LOGIC ---
+                # Load the ABSOLUTE port coordinates from the scene file.
+                absolute_ports = base_config.get('exit_ports', [])
+                if absolute_ports:
+                    # Convert the absolute world coordinates to relative offsets and store them correctly.
+                    new_base._relative_exit_ports = [
+                        (port[0] - new_base.pivot[0], port[1] - new_base.pivot[1])
+                        for port in absolute_ports
+                    ]
+                
+                # Manually trigger a recalculation to apply all loaded properties.
+                # We pass False because we've already handled the ports.
+                new_base.recalculate_geometry(final_calculation=True, regenerate_ports=False)
+                
+                self.bases.append(new_base)
+
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"ERROR: Could not load 'base_layouts.json'. {e}. Using empty scene.")
 
     def draw_bases_to_grid(self):
         # Pass 1: Collect all core pixels from all bases. This is for the fusion check.
@@ -284,12 +323,18 @@ class Simulation:
         self.draw_bases_to_grid() # Redraw the preserved bases onto a clean grid
 
     def add_new_base(self, team='blue', shape_name='BOX'):
-        """Adds a new default base and returns it."""
-        grid_h, grid_w = self.grid_size
-        new_base = Base(team, grid_h // 2, grid_w // 2, shape_name, self.config, scale=8.0, 
-                        core_thickness=1, armor_thickness=2, grid_h=grid_h, grid_w=grid_w)
+        """Creates a new Base object. The Base's __init__ will handle loading its own template."""
+        new_base = Base(
+            team=team,
+            pivot_y=self.grid_size[0] // 2,
+            pivot_x=self.grid_size[1] // 2,
+            shape_name=shape_name,
+            config=self.config,
+            grid_h=self.grid_size[0],
+            grid_w=self.grid_size[1]
+        )
         self.bases.append(new_base)
-        return new_base # Add this return statement
+        return new_base
 
     def delete_base(self, base_to_delete):
         """Removes a selected base."""

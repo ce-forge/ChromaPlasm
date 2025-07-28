@@ -1,0 +1,136 @@
+{
+    "initial_layout": [
+        {
+            "team": "blue",
+            "shape_name": "ARROWHEAD",
+            "pivot": [
+                360,
+                130
+            ],
+            "scale": 8.0,
+            "core_thickness": 1,
+            "armor_thickness": 2,
+            "exit_ports": [
+                [
+                    272,
+                    134
+                ],
+                [
+                    346,
+                    132
+                ]
+            ]
+        },
+        {
+            "team": "red",
+            "shape_name": "N",
+            "pivot": [
+                370,
+                410
+            ],
+            "scale": 8.0,
+            "core_thickness": 1,
+            "armor_thickness": 2,
+            "exit_ports": [
+                [
+                    402,
+                    390
+                ],
+                [
+                    334,
+                    426
+                ]
+            ]
+        }
+    ],
+    "shape_templates": {
+        "ARROWHEAD": {
+            "exit_ports": [
+                [
+                    -31,
+                    39
+                ],
+                [
+                    39,
+                    1
+                ],
+                [
+                    -32,
+                    -38
+                ]
+            ],
+            "scale": 8.0,
+            "core_thickness": 1,
+            "armor_thickness": 2
+        },
+        "BOX": {
+            "exit_ports": [
+                [
+                    -38,
+                    -35
+                ],
+                [
+                    -38,
+                    -5
+                ],
+                [
+                    38,
+                    -35
+                ],
+                [
+                    38,
+                    -5
+                ],
+                [
+                    -25,
+                    -38
+                ],
+                [
+                    -5,
+                    -38
+                ],
+                [
+                    25,
+                    -38
+                ]
+            ],
+            "scale": 8.0,
+            "core_thickness": 1,
+            "armor_thickness": 2
+        },
+        "N": {
+            "exit_ports": [
+                [
+                    38,
+                    -15
+                ],
+                [
+                    -37,
+                    17
+                ]
+            ],
+            "scale": 8.0,
+            "core_thickness": 1,
+            "armor_thickness": 2
+        },
+        "Y": {
+            "exit_ports": [
+                [
+                    -36,
+                    -29
+                ],
+                [
+                    -36,
+                    30
+                ],
+                [
+                    38,
+                    1
+                ]
+            ],
+            "scale": 8.0,
+            "core_thickness": 1,
+            "armor_thickness": 2
+        }
+    }
+}
