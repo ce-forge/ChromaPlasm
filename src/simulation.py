@@ -169,13 +169,27 @@ class Simulation:
         self.draw_bases_to_grid()
 
     def draw_bases_to_grid(self):
+        # Pass 1: Collect all core pixels from all bases. This is for the fusion check.
+        all_core_pixels = set()
         for base in self.bases:
-            armor_id = RED_BASE_ARMOR if base.team == 'red' else BLUE_BASE_ARMOR
+            all_core_pixels.update(base.current_core_pixels)
+
+        # Pass 2: Draw all cores and armor from their pre-calculated lists.
+        for base in self.bases:
             core_id = RED_BASE_CORE if base.team == 'red' else BLUE_BASE_CORE
-            for y,x in base.current_armor_pixels:
-                 if 0 <= y < SIM_HEIGHT and 0 <= x < SIM_WIDTH: self.render_grid[y,x] = armor_id
-            for y,x in base.current_core_pixels:
-                if 0 <= y < SIM_HEIGHT and 0 <= x < SIM_WIDTH: self.render_grid[y,x] = core_id
+            armor_id = RED_BASE_ARMOR if base.team == 'red' else BLUE_BASE_ARMOR
+            
+            # Draw the core pixels
+            for y, x in base.current_core_pixels:
+                if 0 <= y < SIM_HEIGHT and 0 <= x < SIM_WIDTH:
+                    self.render_grid[y, x] = core_id
+
+            # Draw the (potentially damaged) armor pixels
+            for y, x in base.current_armor_pixels:
+                 if 0 <= y < SIM_HEIGHT and 0 <= x < SIM_WIDTH:
+                    # The fusion check: only draw armor if the spot is not another base's core.
+                    if (y, x) not in all_core_pixels:
+                        self.render_grid[y, x] = armor_id
 
     def add_soldier(self, y, x, team, heading):
         if self.agent_count < self.max_agents:
@@ -270,11 +284,12 @@ class Simulation:
         self.draw_bases_to_grid() # Redraw the preserved bases onto a clean grid
 
     def add_new_base(self, team='blue', shape_name='BOX'):
-        """Adds a new default base to the center of the grid."""
+        """Adds a new default base and returns it."""
         grid_h, grid_w = self.grid_size
         new_base = Base(team, grid_h // 2, grid_w // 2, shape_name, self.config, scale=8.0, 
                         core_thickness=1, armor_thickness=2, grid_h=grid_h, grid_w=grid_w)
         self.bases.append(new_base)
+        return new_base # Add this return statement
 
     def delete_base(self, base_to_delete):
         """Removes a selected base."""

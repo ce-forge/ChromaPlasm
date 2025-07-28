@@ -66,17 +66,19 @@ class Dashboard:
         bottom_panel_rect = pygame.Rect(0, DASHBOARD_HEIGHT - DASHBOARD_BOTTOM_PANEL_HEIGHT, DASHBOARD_WIDTH - DASHBOARD_RIGHT_PANEL_WIDTH, DASHBOARD_BOTTOM_PANEL_HEIGHT)
         self.bottom_controls_panel = pygame_gui.elements.UIPanel(relative_rect=bottom_panel_rect, manager=self.ui_manager, object_id='#bottom_panel')
 
-        # Bottom Panel Controls
-        self.play_pause_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 10, 60, 60), text='⏸', manager=self.ui_manager, container=self.bottom_controls_panel)
-        self.speed_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(80, 10, 60, 60), text='1x', manager=self.ui_manager, container=self.bottom_controls_panel)
-        self.reset_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(150, 10, 60, 60), text='⟲', manager=self.ui_manager, container=self.bottom_controls_panel)
-        self.toggle_pheromones_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(220, 10, 180, 30), text='Pheromones: ON', manager=self.ui_manager, container=self.bottom_controls_panel)
-        self.toggle_editor_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(220, 40, 180, 30), text='Enter Editor', manager=self.ui_manager, container=self.bottom_controls_panel)
+        # --- MODIFIED: Bottom Panel Controls with Text Labels ---
+        self.play_pause_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 10, 90, 60), text='PAUSE', manager=self.ui_manager, container=self.bottom_controls_panel)
+        self.speed_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(110, 10, 60, 60), text='1x', manager=self.ui_manager, container=self.bottom_controls_panel)
+        self.reset_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(180, 10, 90, 60), text='RESET', manager=self.ui_manager, container=self.bottom_controls_panel)
         
-        # Stats Panel
-        stats_panel_rect = pygame.Rect(410, 10, 900, 60)
+        # Adjusting positions of other buttons to accommodate new sizes
+        self.toggle_pheromones_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(280, 10, 180, 30), text='Pheromones: ON', manager=self.ui_manager, container=self.bottom_controls_panel)
+        self.toggle_editor_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(280, 40, 180, 30), text='Enter Editor', manager=self.ui_manager, container=self.bottom_controls_panel)
+        
+        # Stats Panel (adjusting position)
+        stats_panel_rect = pygame.Rect(470, 10, 840, 60)
         self.stats_panel = pygame_gui.elements.UIPanel(relative_rect=stats_panel_rect, manager=self.ui_manager, container=self.bottom_controls_panel)
-        x_offset = 10; label_width = 430
+        x_offset = 10; label_width = 400 # Adjusted width slightly
         for team_name, team_color in [('blue', '#96b4ff'), ('red', '#ff9696')]:
             self.team_stat_labels[team_name] = {
                 'title': pygame_gui.elements.UILabel(relative_rect=pygame.Rect(x_offset, 0, label_width, 20), text=f'{team_name.upper()} TEAM', manager=self.ui_manager, container=self.stats_panel, object_id=f'@{team_color}'),
@@ -85,10 +87,8 @@ class Dashboard:
             }
             x_offset += label_width + 10
             
-        # Right Panel Layout
+        # Right Panel Layout (Unchanged)
         content_width = DASHBOARD_RIGHT_PANEL_WIDTH - 20
-        
-        # 1. Editor Controls
         self.editor_controls_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, 220), manager=self.ui_manager, container=self.right_panel)
         pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 5, content_width - 20, 30), text="-- SCENE EDITOR --", manager=self.ui_manager, container=self.editor_controls_container)
         self.editor_add_base_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 40, content_width - 20, 40), text="Add New Base", manager=self.ui_manager, container=self.editor_controls_container)
@@ -96,8 +96,6 @@ class Dashboard:
         pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 140, content_width - 20, 30), text="Shorts Title:", manager=self.ui_manager, container=self.editor_controls_container)
         self.editor_title_entry = pygame_gui.elements.UITextEntryLine(relative_rect=pygame.Rect(10, 170, content_width - 20, 40), manager=self.ui_manager, container=self.editor_controls_container)
         self.editor_title_entry.set_text(self.shorts_title_text)
-
-        # 2. Global Sim Settings
         self.global_params_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, 385), manager=self.ui_manager, container=self.right_panel)
         pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 5, content_width - 20, 30), text="-- GLOBAL SETTINGS --", manager=self.ui_manager, container=self.global_params_container)
         y_offset_params = 40
@@ -107,10 +105,7 @@ class Dashboard:
             slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(230, y_offset_params, content_width - 250, 25), start_value=getattr(self.config, key), value_range=[start, end], manager=self.ui_manager, container=self.global_params_container, object_id=f"#{key}_slider")
             self.global_ui_elements[key] = slider
             y_offset_params += 35
-
-        # 3. Contextual Selection Panel
         self.selection_params_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 405, content_width, 400), manager=self.ui_manager, container=self.right_panel)
-        
         self.toggle_editor_mode(initial=True)
 
     def toggle_editor_mode(self, initial=False):
@@ -204,7 +199,12 @@ class Dashboard:
                 elif event.ui_element == self.reset_button: self.reset_simulation()
                 elif event.ui_element == self.toggle_pheromones_button: self.toggle_pheromone_display()
                 elif event.ui_element == self.toggle_editor_button: self.toggle_editor_mode()
-                elif event.ui_element == self.editor_add_base_button: self.simulation.add_new_base()
+                elif event.ui_element == self.editor_add_base_button:
+                    new_base = self.simulation.add_new_base()
+                    self.selected_object = new_base
+                    self.is_editing_spawns = False # Ensure we are in base-editing mode
+                    self.editor_port_mode = 'DRAG'
+                    self.update_selection_panel()
                 elif event.ui_element == self.editor_delete_button: 
                     self.simulation.delete_base(self.selected_object)
                     self.selected_object = None
@@ -337,13 +337,15 @@ class Dashboard:
             self.update_selection_panel()
             
     def reset_simulation(self):
+        for base in self.simulation.bases:
+            base.recalculate_geometry(final_calculation=True)
         self.simulation.reset_dynamic_state()
         self.vfx_manager.particles.clear()
         self.frame_count = 0
         if self.current_mode == 'SIMULATION':
             self.is_paused = False
-            self.play_pause_button.set_text('⏸')
-        print("Simulation reset. Base layout preserved.")
+            self.play_pause_button.set_text('PAUSE')
+        print("Simulation reset. Base layout and armor restored.")
 
     def update_layout(self):
         screen_w, screen_h = self.screen.get_size()
@@ -364,7 +366,7 @@ class Dashboard:
     def toggle_pause(self):
         if self.current_mode == 'EDITOR': return
         self.is_paused = not self.is_paused
-        self.play_pause_button.set_text('▶' if self.is_paused else '⏸')
+        self.play_pause_button.set_text('PLAY' if self.is_paused else 'PAUSE')
 
     def cycle_speed(self):
         current_index = self.speed_options.index(self.sim_speed)
