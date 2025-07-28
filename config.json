@@ -11,7 +11,10 @@
     "sensor_angle_degrees": 45.0,
     "sensor_distance": 15.0,
     "rotation_angle_degrees": 22.5,
-    "combat_chance": 0.6
+    "combat_chance": 0.6,
+    "enemy_sense_radius": 30.0,
+    "base_attack_radius": 50.0,
+    "ai_update_interval": 10
   },
   "spawning_settings": {
     "spawn_rate": 2,

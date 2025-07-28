@@ -13,23 +13,19 @@ from src.viewport import Viewport
 
 class Dashboard:
     def __init__(self):
-        with open('config.json', 'r') as f: config_data = json.load(f)
-        self.config = SimpleNamespace(**config_data['run_settings'], **config_data['engine_settings'],
-                                      **config_data['spawning_settings'], **config_data['camera_settings'],
-                                      **config_data['presentation_settings'])
+        with open('config.json', 'r') as f:
+            config_data = json.load(f)
+        self.config = SimpleNamespace(**config_data['run_settings'], **config_data['engine_settings'], **config_data['spawning_settings'], **config_data['camera_settings'], **config_data['presentation_settings'])
         
         self.frame_count = 0
         self.is_recording = False
         self.show_pheromones = True
         
-        # --- Editor State & Data ---
         self.current_mode = 'SIMULATION'
         self.is_editing_spawns = False
-        self.editor_port_mode = 'DRAG' # NEW: Tracks if we are dragging, adding, or deleting ports.
-        self.dragged_object = None
-        self.drag_type = None
+        self.editor_port_mode = 'DRAG'
+        self.dragged_object, self.drag_type, self.selected_port_index = None, None, -1
         self.drag_offset = (0, 0)
-        self.selected_port_index = -1
         self.shorts_title_text = self.config.question_text
         
         self.is_paused = False
@@ -46,8 +42,8 @@ class Dashboard:
         self.viewport = Viewport(pygame.Rect(0, 0, 1, 1))
         self.selected_object = None
         
-        self.global_ui_elements = {}
-        self.selection_ui_elements = {}
+        # --- Simplified UI Element Storage ---
+        self.ui_elements = {'global': {}, 'selection': {}}
         self.team_stat_labels = {}
         
         self.audio_manager = AudioManager(self.config)
@@ -58,67 +54,81 @@ class Dashboard:
         self.build_ui_layout()
         print("Dashboard initialized.")
 
+    def _create_parameter_row(self, parent, y_offset, name, value_range, current_value, is_int=False):
+        """Helper to create a label, slider, and value label row."""
+        container_width = parent.get_container().get_rect().width
+        
+        # Convert snake_case name to Title Case for the UI label
+        label_text = name.replace('_', ' ').title()
+        pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, 200, 25), text=label_text, manager=self.ui_manager, container=parent)
+        
+        slider = pygame_gui.elements.UIHorizontalSlider(
+            relative_rect=pygame.Rect(210, y_offset, container_width - 290, 25),
+            start_value=current_value, value_range=value_range, manager=self.ui_manager, container=parent,
+            object_id=f"#{name}_slider"
+        )
+        
+        value_label = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(container_width - 70, y_offset, 60, 25),
+            text=str(int(current_value) if is_int else f"{current_value:.2f}"),
+            manager=self.ui_manager, container=parent
+        )
+        return slider, value_label
+
     def build_ui_layout(self):
-        # Panels
-        right_panel_rect = pygame.Rect(DASHBOARD_WIDTH - DASHBOARD_RIGHT_PANEL_WIDTH, 0, DASHBOARD_RIGHT_PANEL_WIDTH, DASHBOARD_HEIGHT)
-        self.right_panel = pygame_gui.elements.UIPanel(relative_rect=right_panel_rect, manager=self.ui_manager, object_id='#params_panel')
+        # --- Main Panels ---
+        self.right_panel = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(DASHBOARD_WIDTH - DASHBOARD_RIGHT_PANEL_WIDTH, 0, DASHBOARD_RIGHT_PANEL_WIDTH, DASHBOARD_HEIGHT), manager=self.ui_manager, object_id='#params_panel')
+        self.bottom_panel = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(0, DASHBOARD_HEIGHT - DASHBOARD_BOTTOM_PANEL_HEIGHT, DASHBOARD_WIDTH - DASHBOARD_RIGHT_PANEL_WIDTH, DASHBOARD_BOTTOM_PANEL_HEIGHT), manager=self.ui_manager, object_id='#bottom_panel')
+        content_width = self.right_panel.get_container().get_rect().width
 
-        bottom_panel_rect = pygame.Rect(0, DASHBOARD_HEIGHT - DASHBOARD_BOTTOM_PANEL_HEIGHT, DASHBOARD_WIDTH - DASHBOARD_RIGHT_PANEL_WIDTH, DASHBOARD_BOTTOM_PANEL_HEIGHT)
-        self.bottom_controls_panel = pygame_gui.elements.UIPanel(relative_rect=bottom_panel_rect, manager=self.ui_manager, object_id='#bottom_panel')
+        # --- Bottom Panel Controls ---
+        self.play_pause_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 10, 90, 60), text='PAUSE', manager=self.ui_manager, container=self.bottom_panel)
+        self.speed_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(110, 10, 60, 60), text='1x', manager=self.ui_manager, container=self.bottom_panel)
+        self.reset_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(180, 10, 90, 60), text='RESET', manager=self.ui_manager, container=self.bottom_panel)
+        self.toggle_pheromones_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(280, 10, 180, 30), text='Pheromones: ON', manager=self.ui_manager, container=self.bottom_panel)
+        self.toggle_editor_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(280, 40, 180, 30), text='Enter Editor', manager=self.ui_manager, container=self.bottom_panel)
+        self.stats_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(470, 10, 840, 60), manager=self.ui_manager, container=self.bottom_panel)
 
-        # Bottom Panel Controls
-        self.play_pause_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 10, 90, 60), text='PAUSE', manager=self.ui_manager, container=self.bottom_controls_panel)
-        self.speed_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(110, 10, 60, 60), text='1x', manager=self.ui_manager, container=self.bottom_controls_panel)
-        self.reset_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(180, 10, 90, 60), text='RESET', manager=self.ui_manager, container=self.bottom_controls_panel)
-        self.toggle_pheromones_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(280, 10, 180, 30), text='Pheromones: ON', manager=self.ui_manager, container=self.bottom_controls_panel)
-        self.toggle_editor_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(280, 40, 180, 30), text='Enter Editor', manager=self.ui_manager, container=self.bottom_controls_panel)
+        # --- Right Panel: Mode-Aware Groups ---
+        # Container for Simulation Mode controls
+        self.sim_ui_group = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, 420), manager=self.ui_manager, container=self.right_panel)
+        pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 5, content_width - 20, 30), text="Simulation Parameters", manager=self.ui_manager, container=self.sim_ui_group)
         
-        # Stats Panel
-        stats_panel_rect = pygame.Rect(470, 10, 840, 60)
-        self.stats_panel = pygame_gui.elements.UIPanel(relative_rect=stats_panel_rect, manager=self.ui_manager, container=self.bottom_controls_panel)
-        x_offset = 10; label_width = 400
-        for team_name, team_color in [('blue', '#96b4ff'), ('red', '#ff9696')]:
-            self.team_stat_labels[team_name] = {
-                'title': pygame_gui.elements.UILabel(relative_rect=pygame.Rect(x_offset, 0, label_width, 20), text=f'{team_name.upper()} TEAM', manager=self.ui_manager, container=self.stats_panel, object_id=f'@{team_color}'),
-                'agents': pygame_gui.elements.UILabel(relative_rect=pygame.Rect(x_offset, 20, label_width, 20), text='Agents: 0', manager=self.ui_manager, container=self.stats_panel),
-                'health': pygame_gui.elements.UILabel(relative_rect=pygame.Rect(x_offset, 40, label_width, 20), text='Base Health: 0', manager=self.ui_manager, container=self.stats_panel)
-            }
-            x_offset += label_width + 10
-            
-        # Right Panel Layout
-        content_width = DASHBOARD_RIGHT_PANEL_WIDTH - 20
+        # Container for Editor Mode controls
+        self.editor_ui_group = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, 270), manager=self.ui_manager, container=self.right_panel)
         
-        # 1. Editor Controls
-        self.editor_controls_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, 270), manager=self.ui_manager, container=self.right_panel)
-        pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 5, content_width - 20, 30), text="-- SCENE EDITOR --", manager=self.ui_manager, container=self.editor_controls_container)
-        self.editor_add_base_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 40, content_width - 20, 40), text="Add New Base", manager=self.ui_manager, container=self.editor_controls_container)
-        self.editor_delete_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 90, content_width - 20, 40), text="Delete Selected Base", manager=self.ui_manager, container=self.editor_controls_container)
-        
-        self.save_layout_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 140, content_width - 20, 40), text="Save Layout as Default", manager=self.ui_manager, container=self.editor_controls_container)
+        # Dynamic panel for showing properties of a selected object
+        self.selection_panel = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 440, content_width, 400), manager=self.ui_manager, container=self.right_panel)
 
-        pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 190, content_width - 20, 30), text="Shorts Title:", manager=self.ui_manager, container=self.editor_controls_container)
-        self.editor_title_entry = pygame_gui.elements.UITextEntryLine(relative_rect=pygame.Rect(10, 220, content_width - 20, 40), manager=self.ui_manager, container=self.editor_controls_container)
+        # --- Populate Global Simulation Parameters ---
+        sim_params = {
+            'sensor_angle_degrees': (10.0, 90.0), 'sensor_distance': (2.0, 50.0), 
+            'rotation_angle_degrees': (5.0, 90.0), 'combat_chance': (0.0, 1.0), 
+            'pheromone_decay_rate': (0.8, 1.0), 'pheromone_blur_sigma': (0.0, 5.0), 
+            'pheromone_deposit_amount': (10.0, 300.0), 'enemy_sense_radius': (10.0, 100.0),
+            'base_attack_radius': (10.0, 150.0), 'ai_update_interval': (1, 30, True)
+        }
+        y_offset = 40
+        for name, p_range in sim_params.items():
+            is_int = len(p_range) == 3 and p_range[2]
+            slider, label = self._create_parameter_row(self.sim_ui_group, y_offset, name, (p_range[0], p_range[1]), getattr(self.config, name), is_int)
+            self.ui_elements['global'][name] = {'slider': slider, 'label': label, 'is_int': is_int}
+            y_offset += 35
+
+        pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 5, content_width - 20, 30), text="Scene Editor", manager=self.ui_manager, container=self.editor_ui_group)
+        self.editor_add_base_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 40, content_width - 20, 40), text="Add New Base", manager=self.ui_manager, container=self.editor_ui_group)
+        self.editor_delete_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 90, content_width - 20, 40), text="Delete Selected Base", manager=self.ui_manager, container=self.editor_ui_group)
+        
+        # This line was missing. It is now correctly created and assigned.
+        self.save_layout_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, 140, content_width - 20, 40), text="Save Scene Layout", manager=self.ui_manager, container=self.editor_ui_group)
+        
+        pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 190, content_width - 20, 30), text="Shorts Title:", manager=self.ui_manager, container=self.editor_ui_group)
+        self.editor_title_entry = pygame_gui.elements.UITextEntryLine(relative_rect=pygame.Rect(10, 220, content_width - 20, 40), manager=self.ui_manager, container=self.editor_ui_group)
         self.editor_title_entry.set_text(self.shorts_title_text)
-
-        # 2. Global Sim Settings
-        self.global_params_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, 385), manager=self.ui_manager, container=self.right_panel)
-        pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, 5, content_width - 20, 30), text="-- GLOBAL SETTINGS --", manager=self.ui_manager, container=self.global_params_container)
-        y_offset_params = 40
-        global_params = {'sensor_angle_degrees': (10.0, 45.0), 'sensor_distance': (2.0, 20.0), 'rotation_angle_degrees': (10.0, 45.0), 'combat_chance': (0.0, 1.0), 'pheromone_decay_rate': (0.8, 1.0), 'pheromone_blur_sigma': (0.0, 3.0), 'pheromone_deposit_amount': (0.1, 200.0)}
-        for key, (start, end) in global_params.items():
-            pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset_params, 220, 25), text=f"{key}:", manager=self.ui_manager, container=self.global_params_container)
-            slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(230, y_offset_params, content_width - 250, 25), start_value=getattr(self.config, key), value_range=[start, end], manager=self.ui_manager, container=self.global_params_container, object_id=f"#{key}_slider")
-            self.global_ui_elements[key] = slider
-            y_offset_params += 35
-
-        # 3. Contextual Selection Panel
-        self.selection_params_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 405, content_width, 400), manager=self.ui_manager, container=self.right_panel)
         
         self.toggle_editor_mode(initial=True)
 
     def toggle_editor_mode(self, initial=False):
-        self.is_editing_spawns = False
-        
         if not initial:
             if self.current_mode == 'SIMULATION':
                 self.current_mode = 'EDITOR'
@@ -129,62 +139,87 @@ class Dashboard:
             self.is_paused = True
             self.play_pause_button.disable()
             self.toggle_editor_button.set_text('Exit Editor')
-            self.global_params_container.hide()
-            self.editor_controls_container.show()
-            self.selection_params_container.set_relative_position((10, 240))
-        else:
-            self.current_mode = 'SIMULATION'
+            self.sim_ui_group.hide()
+            self.editor_ui_group.show()
+            self.selection_panel.set_relative_position((10, 290))
+        else: # SIMULATION mode
             self.play_pause_button.enable()
             self.toggle_editor_button.set_text('Enter Editor')
-            self.global_params_container.show()
-            self.editor_controls_container.hide()
-            self.selection_params_container.set_relative_position((10, 405))
+            self.sim_ui_group.show()
+            self.editor_ui_group.hide()
+            self.selection_panel.set_relative_position((10, 440))
+            
+            # --- THE FIX ---
+            # Reset editor-specific states when returning to simulation mode
+            self.is_editing_spawns = False
+            self.editor_port_mode = 'DRAG'
         
         self.update_selection_panel()
 
     def update_selection_panel(self):
-        if self.selection_params_container and self.selection_params_container.get_container():
-            for element in self.selection_params_container.get_container().elements[:]: element.kill()
-        self.selection_ui_elements = {}
+        for element in self.selection_panel.get_container().elements[:]: element.kill()
+        self.ui_elements['selection'] = {}
         if not self.selected_object:
-            self.selection_params_container.hide(); return
+            self.selection_panel.hide(); return
+        self.selection_panel.show()
         
-        self.selection_params_container.show()
         base = self.selected_object
-        content_width = self.selection_params_container.get_container().get_rect().width
+        container = self.selection_panel
+        content_width = container.get_container().get_rect().width
         y_offset = 5
-        title_text = f"BASE: {base.shape_name} ({base.team.upper()})"
-        if self.is_editing_spawns: title_text = f"EDITING SPAWNS for {base.shape_name}"
-        self.selection_ui_elements['title'] = pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, content_width - 20, 30), text=title_text, manager=self.ui_manager, container=self.selection_params_container)
+        
+        pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, content_width - 20, 30), text="Selected Base Properties", manager=self.ui_manager, container=container)
         y_offset += 35
-        if self.current_mode == 'SIMULATION':
-            editable_params = ['spawn_rate', 'units_per_spawn']
-            for key in editable_params:
-                pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, 220, 30), text=f"{key}:", manager=self.ui_manager, container=self.selection_params_container)
-                entry = pygame_gui.elements.UITextEntryLine(relative_rect=pygame.Rect(230, y_offset, 150, 30), manager=self.ui_manager, container=self.selection_params_container, object_id=f"#base_{key}_entry")
-                entry.set_text(str(self.simulation.get_param(base.team, key))); self.selection_ui_elements[key] = entry
-                y_offset += 40
-        else: # EDITOR Mode
-            pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, 100, 30), text="Team:", manager=self.ui_manager, container=self.selection_params_container)
-            self.selection_ui_elements['team_dropdown'] = pygame_gui.elements.UIDropDownMenu(options_list=['red', 'blue'], starting_option=base.team, relative_rect=pygame.Rect(120, y_offset, content_width - 130, 30), manager=self.ui_manager, container=self.selection_params_container)
+
+        def create_entry(name, value, y_pos):
+            label_text = name.replace('_', ' ').title()
+            pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_pos, 160, 30), text=label_text, manager=self.ui_manager, container=container)
+            entry = pygame_gui.elements.UITextEntryLine(relative_rect=pygame.Rect(180, y_pos, content_width - 190, 30), manager=self.ui_manager, container=container, object_id=f"#{name}_entry")
+            entry.set_text(str(value))
+            self.ui_elements['selection'][name] = entry
+            return entry
+
+        if self.current_mode == 'EDITOR':
+            pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, 160, 30), text="Team", manager=self.ui_manager, container=container)
+            self.ui_elements['selection']['team_dropdown'] = pygame_gui.elements.UIDropDownMenu(options_list=['red', 'blue', 'green', 'yellow'], starting_option=base.team, relative_rect=pygame.Rect(180, y_offset, content_width - 190, 30), manager=self.ui_manager, container=container)
             y_offset += 40
-            pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, 100, 30), text="Shape:", manager=self.ui_manager, container=self.selection_params_container)
-            self.selection_ui_elements['shape_dropdown'] = pygame_gui.elements.UIDropDownMenu(options_list=['Y', 'N', 'BOX', 'ARROWHEAD'], starting_option=base.shape_name, relative_rect=pygame.Rect(120, y_offset, content_width - 130, 30), manager=self.ui_manager, container=self.selection_params_container)
-            y_offset += 50
+            pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, 160, 30), text="Shape", manager=self.ui_manager, container=container)
+            self.ui_elements['selection']['shape_dropdown'] = pygame_gui.elements.UIDropDownMenu(options_list=['Y', 'N', 'BOX', 'ARROWHEAD'], starting_option=base.shape_name, relative_rect=pygame.Rect(180, y_offset, content_width - 190, 30), manager=self.ui_manager, container=container)
+            y_offset += 40
+
+            # --- CORRECTED SIZE SLIDER LOGIC ---
+            pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, 160, 30), text="Size", manager=self.ui_manager, container=container)
+            # These values correspond to percentages of the 'default' size of 8.0
+            size_map = {0: 4.0, 1: 6.0, 2: 8.0, 3: 10.0} 
+            text_map = {0: "50%", 1: "75%", 2: "100%", 3: "125%"}
+            val_to_scale = {v: k for k, v in size_map.items()}
+            current_val = val_to_scale.get(base.scale, 2)
+            
+            slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(180, y_offset, content_width - 270, 30), start_value=current_val, value_range=(0, 3), manager=self.ui_manager, container=container, object_id="#size_slider")
+            label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect(content_width - 80, y_offset, 70, 30), text=text_map.get(current_val, "Custom"), manager=self.ui_manager, container=container)
+            self.ui_elements['selection']['size'] = {'slider': slider, 'label': label, 'map': size_map, 'text_map': text_map}
+            y_offset += 40
+
+            create_entry('core_thickness', base.core_thickness, y_offset); y_offset += 40
+            create_entry('armor_thickness', base.armor_thickness, y_offset); y_offset += 50
+            
             btn_text = "Return to Base Edit" if self.is_editing_spawns else "Modify Spawn Ports"
-            self.selection_ui_elements['modify_spawns_button'] = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, y_offset, content_width - 20, 40), text=btn_text, manager=self.ui_manager, container=self.selection_params_container)
+            self.ui_elements['selection']['modify_spawns_button'] = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, y_offset, content_width - 20, 40), text=btn_text, manager=self.ui_manager, container=container)
             y_offset += 45
             if self.is_editing_spawns:
-                self.selection_ui_elements['modify_spawns_button'].select()
+                self.ui_elements['selection']['modify_spawns_button'].select()
                 button_width = (content_width - 30) // 2
-                add_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, y_offset, button_width, 30), text="Add Port", manager=self.ui_manager, container=self.selection_params_container)
-                del_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(20 + button_width, y_offset, button_width, 30), text="Delete Port", manager=self.ui_manager, container=self.selection_params_container)
-                self.selection_ui_elements['add_port_button'] = add_button; self.selection_ui_elements['delete_port_button'] = del_button
+                add_btn = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, y_offset, button_width, 30), text="Add Port", manager=self.ui_manager, container=container)
+                del_btn = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(20 + button_width, y_offset, button_width, 30), text="Delete Port", manager=self.ui_manager, container=container)
+                self.ui_elements['selection']['add_port_button'] = add_btn; self.ui_elements['selection']['delete_port_button'] = del_btn
                 y_offset += 35
-                if self.editor_port_mode == 'ADD': add_button.select()
-                elif self.editor_port_mode == 'DELETE': del_button.select()
-                template_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, y_offset, content_width - 20, 30), text="Save Port Layout as Default", manager=self.ui_manager, container=self.selection_params_container)
-                self.selection_ui_elements['save_ports_button'] = template_button
+                if self.editor_port_mode == 'ADD': add_btn.select()
+                elif self.editor_port_mode == 'DELETE': del_btn.select()
+                save_btn = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, y_offset, content_width - 20, 30), text=f"Save '{base.shape_name}' Port Layout", manager=self.ui_manager, container=container)
+                self.ui_elements['selection']['save_ports_button'] = save_btn
+        else:
+            create_entry('spawn_rate', self.simulation.get_param(base.team, 'spawn_rate'), y_offset); y_offset += 40
+            create_entry('units_per_spawn', self.simulation.get_param(base.team, 'units_per_spawn'), y_offset)
 
     def handle_events(self):
         time_delta = self.clock.tick(60) / 1000.0
@@ -204,30 +239,32 @@ class Dashboard:
                     self.is_editing_spawns = False; self.editor_port_mode = 'DRAG'; self.update_selection_panel()
                 elif event.ui_element == self.editor_delete_button: 
                     self.simulation.delete_base(self.selected_object); self.selected_object = None; self.update_selection_panel()
+                
                 if self.selected_object:
-                    if event.ui_element == self.selection_ui_elements.get('save_ports_button'): self.save_port_layout_as_default()
-                    if event.ui_element == self.selection_ui_elements.get('modify_spawns_button'):
+                    if event.ui_element == self.ui_elements['selection'].get('save_ports_button'): self.save_port_layout_as_default()
+                    if event.ui_element == self.ui_elements['selection'].get('modify_spawns_button'):
                         self.is_editing_spawns = not self.is_editing_spawns; self.editor_port_mode = 'DRAG'; self.update_selection_panel()
                     if self.is_editing_spawns:
-                        if event.ui_element == self.selection_ui_elements.get('add_port_button'):
+                        if event.ui_element == self.ui_elements['selection'].get('add_port_button'):
                             self.editor_port_mode = 'DRAG' if self.editor_port_mode == 'ADD' else 'ADD'; self.update_selection_panel()
-                        elif event.ui_element == self.selection_ui_elements.get('delete_port_button'):
+                        elif event.ui_element == self.ui_elements['selection'].get('delete_port_button'):
                             self.editor_port_mode = 'DRAG' if self.editor_port_mode == 'DELETE' else 'DELETE'; self.update_selection_panel()
 
-            # --- THIS SECTION IS NOW CORRECT ---
             if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
                 self.handle_slider_move(event.ui_element)
             
             if event.type == pygame_gui.UI_TEXT_ENTRY_FINISHED:
                 if event.ui_element == self.editor_title_entry:
                     self.shorts_title_text = event.text
-                else: # All other text entries are for parameters
+                else:
                     self.handle_text_entry(event.ui_element)
 
+            # --- THE FIX for AttributeError ---
+            # Now correctly references self.ui_elements['selection'] for dropdowns
             if event.type == pygame_gui.UI_DROP_DOWN_MENU_CHANGED and self.selected_object:
-                if event.ui_element == self.selection_ui_elements.get('team_dropdown'):
+                if event.ui_element == self.ui_elements['selection'].get('team_dropdown'):
                     self.selected_object.update_attributes(team=event.text)
-                if event.ui_element == self.selection_ui_elements.get('shape_dropdown'):
+                if event.ui_element == self.ui_elements['selection'].get('shape_dropdown'):
                     self.selected_object.update_attributes(shape_name=event.text)
                 self.update_selection_panel()
 
@@ -424,14 +461,18 @@ class Dashboard:
     def update_layout(self):
         screen_w, screen_h = self.screen.get_size()
         self.ui_manager.set_window_resolution((screen_w, screen_h))
+        
         self.right_panel.set_dimensions((DASHBOARD_RIGHT_PANEL_WIDTH, screen_h))
         self.right_panel.set_position((screen_w - DASHBOARD_RIGHT_PANEL_WIDTH, 0))
+        
         bottom_panel_width = screen_w - DASHBOARD_RIGHT_PANEL_WIDTH
-        self.bottom_controls_panel.set_dimensions((bottom_panel_width, DASHBOARD_BOTTOM_PANEL_HEIGHT))
-        self.bottom_controls_panel.set_position((0, screen_h - DASHBOARD_BOTTOM_PANEL_HEIGHT))
-        self.viewport.rect.x = 0; self.viewport.rect.y = 0
+        self.bottom_panel.set_dimensions((bottom_panel_width, DASHBOARD_BOTTOM_PANEL_HEIGHT))
+        self.bottom_panel.set_position((0, screen_h - DASHBOARD_BOTTOM_PANEL_HEIGHT))
+        
+        self.viewport.rect.x = 0
+        self.viewport.rect.y = 0
         self.viewport.rect.width = self.right_panel.get_abs_rect().left
-        self.viewport.rect.height = self.bottom_controls_panel.get_abs_rect().top
+        self.viewport.rect.height = self.bottom_panel.get_abs_rect().top
         
     def toggle_pheromone_display(self):
         self.show_pheromones = not self.show_pheromones
@@ -448,31 +489,55 @@ class Dashboard:
         self.sim_speed = self.speed_options[next_index]
         self.speed_button.set_text(f'{self.sim_speed}x')
 
+      
     def handle_slider_move(self, slider):
-        if slider.object_ids[-1].endswith('_slider'):
-            key = slider.object_ids[-1].replace('#', '').replace('_slider', '')
-            if hasattr(self.config, key):
-                setattr(self.config, key, slider.get_current_value())
+        """Handles updates for ANY horizontal slider in the UI."""
+        slider_id = slider.object_ids[-1].replace('#', '').replace('_slider', '')
+        current_value = slider.get_current_value()
+
+        # Handle Global Simulation Sliders
+        if slider_id in self.ui_elements['global']:
+            param = self.ui_elements['global'][slider_id]
+            if param['is_int']: param['label'].set_text(str(int(current_value)))
+            else: param['label'].set_text(f"{current_value:.2f}")
+            if hasattr(self.config, slider_id):
+                setattr(self.config, slider_id, current_value)
                 self.simulation._compile_team_params()
+        
+        # Handle Selection-Specific Sliders
+        elif slider_id == 'size' and self.selected_object:
+            param = self.ui_elements['selection']['size']
+            size_val = int(current_value)
+            new_scale = param['map'].get(size_val, 1.0) # Default to 1.0
+            param['label'].set_text(param['text_map'].get(size_val, "Custom"))
+            self.selected_object.scale = new_scale
+            # Immediately recalculate to show the new size, but don't wipe ports
+            self.selected_object.recalculate_geometry(final_calculation=False, regenerate_ports=False)
+
 
     def handle_text_entry(self, entry_line):
-        if not self.selected_object or not hasattr(self.selected_object, 'team'): return
+        """Handles updates for ANY text entry field in the UI."""
+        if not self.selected_object: return
         base = self.selected_object
-        if entry_line.object_ids[-1].endswith('_entry'):
-            key = entry_line.object_ids[-1].replace('#base_', '').replace('_entry', '')
+        entry_id = entry_line.object_ids[-1].replace('#', '').replace('_entry', '')
+
+        # Handle Simulation parameter overrides
+        if entry_id in ['spawn_rate', 'units_per_spawn']:
             try:
-                new_value = float(entry_line.get_text())
-                # Ensure spawn parameters are integers
-                if 'rate' in key or 'spawn' in key: new_value = int(new_value)
-                # Update the override for the specific team
+                new_value = int(float(entry_line.get_text()))
                 if base.team not in self.simulation.team_params_overrides:
                     self.simulation.team_params_overrides[base.team] = {}
-                self.simulation.team_params_overrides[base.team][key] = new_value
+                self.simulation.team_params_overrides[base.team][entry_id] = new_value
                 self.simulation._compile_team_params()
-                print(f"Set {key} for team {base.team} to {new_value}")
-            except (ValueError, TypeError):
-                print(f"Invalid input for {key}. Reverting.")
-                self.update_selection_panel() # Revert to show the last valid value
+            except (ValueError, TypeError): self.update_selection_panel()
+        
+        # Handle Editor base property changes
+        elif entry_id in ['core_thickness', 'armor_thickness']:
+            try:
+                new_value = max(1, int(float(entry_line.get_text()))) # Ensure thickness is at least 1
+                setattr(base, entry_id, new_value)
+                base.recalculate_geometry(final_calculation=False, regenerate_ports=False)
+            except (ValueError, TypeError): self.update_selection_panel()
     
     def update_stats_panel(self):
         for team_name, labels in self.team_stat_labels.items():
