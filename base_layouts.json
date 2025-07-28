@@ -1,0 +1,91 @@
+{
+    "initial_layout": [
+        {
+            "team": "Azure",
+            "shape_name": "ARROWHEAD",
+            "pivot": [
+                360,
+                130
+            ],
+            "scale": 8.0,
+            "core_thickness": 1,
+            "armor_thickness": 2,
+            "exit_ports": [
+                [
+                    327,
+                    90
+                ],
+                [
+                    400,
+                    131
+                ],
+                [
+                    327,
+                    169
+                ]
+            ]
+        },
+        {
+            "team": "Crimson",
+            "shape_name": "N",
+            "pivot": [
+                370,
+                410
+            ],
+            "scale": 8.0,
+            "core_thickness": 1,
+            "armor_thickness": 2,
+            "exit_ports": [
+                [
+                    402,
+                    390
+                ],
+                [
+                    334,
+                    426
+                ]
+            ]
+        },
+        {
+            "team": "Amethyst",
+            "shape_name": "BOX",
+            "pivot": [
+                210,
+                390
+            ],
+            "scale": 8.0,
+            "core_thickness": 1,
+            "armor_thickness": 2,
+            "exit_ports": [
+                [
+                    172,
+                    355
+                ],
+                [
+                    172,
+                    385
+                ],
+                [
+                    248,
+                    355
+                ],
+                [
+                    248,
+                    385
+                ],
+                [
+                    185,
+                    352
+                ],
+                [
+                    205,
+                    352
+                ],
+                [
+                    235,
+                    352
+                ]
+            ]
+        }
+    ]
+}

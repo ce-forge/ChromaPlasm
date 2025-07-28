@@ -1,6 +1,43 @@
 import numpy as np
 import random
 from src.constants import *
+from numba import jit
+
+@jit(nopython=True, fastmath=True, cache=True)
+def get_next_move(y, x, heading, pheromone_grid, grid_h, grid_w, 
+                  sensor_angle_rad, rotation_angle_rad, sensor_dist):
+    """
+    A Numba-optimized function that performs the SENSE->ROTATE->MOVE cycle.
+    """
+    # 1. SENSE: Check pheromones at three sensor points
+    def get_scent_at(angle):
+        sensor_y = int(y + sensor_dist * np.sin(angle))
+        sensor_x = int(x + sensor_dist * np.cos(angle))
+        if 0 <= sensor_y < grid_h and 0 <= sensor_x < grid_w:
+            return pheromone_grid[sensor_y, sensor_x]
+        return 0.0
+
+    scent_forward = get_scent_at(heading)
+    scent_left = get_scent_at(heading - sensor_angle_rad)
+    scent_right = get_scent_at(heading + sensor_angle_rad)
+
+    # 2. ROTATE: Adjust heading based on which sensor has the strongest scent.
+    forward_bias = 1.2
+    if (scent_forward * forward_bias) >= scent_left and (scent_forward * forward_bias) >= scent_right:
+        heading += 0.0 # Prefer to go forward
+    elif scent_left > scent_right:
+        heading -= rotation_angle_rad
+    elif scent_right > scent_left:
+        heading += rotation_angle_rad
+    else: # If scents are equal (and not zero), randomly choose a turn
+        heading += random.uniform(-rotation_angle_rad, rotation_angle_rad)
+
+    # 3. MOVE: Calculate the new position one step along the new heading
+    final_y = y + np.sin(heading)
+    final_x = x + np.cos(heading)
+
+    return (int(round(final_y)), int(round(final_x))), heading
+
 
 class Behavior:
     """Abstract base class for all agent AI strategies."""
@@ -9,58 +46,22 @@ class Behavior:
 
 class SlimeMoldBehavior(Behavior):
     """
-    A behavior where agents follow pheromone trails with a degree of randomness
-    and forward-facing sensory input, creating more organic trails.
+    This class acts as a wrapper, preparing data for the optimized Numba function.
     """
     def get_next_move(self, soldier, sim):
+        params = sim.get_params_for_team(soldier.team)
         pheromone_grid = sim.red_pheromone if soldier.team == 'red' else sim.blue_pheromone
-        y, x = soldier.y, soldier.x
-
-        # Instead of just 8 neighbors, we sense in a cone in front of the soldier.
-        # The direction is based on the soldier's last move (its momentum).
-        forward_vec = soldier.last_move
-        # Normalize the forward vector to get a clear direction
-        norm = np.sqrt(forward_vec[0]**2 + forward_vec[1]**2)
-        if norm > 0:
-            forward_vec = (forward_vec[0]/norm, forward_vec[1]/norm)
-        else: # If no momentum, pick a random direction
-            forward_vec = (random.uniform(-1,1), random.uniform(-1,1))
-
-        potential_moves = []
         
-        # Sense 3 points: one straight ahead, and two at +/- 45 degrees
-        for angle_offset in [-0.6, 0, 0.6]: # Radians for ~45 degrees
-            angle = np.arctan2(forward_vec[0], forward_vec[1]) + angle_offset
-            
-            # Check a few pixels out in that direction
-            for distance in [1, 2, 3]:
-                ny = int(y + distance * np.sin(angle))
-                nx = int(x + distance * np.cos(angle))
-                
-                if 0 <= ny < sim.grid_size[0] and 0 <= nx < sim.grid_size[1]:
-                    scent = pheromone_grid[ny, nx]
-                    potential_moves.append(((ny, nx), scent))
-
-        # Also include the 8 neighbors as a fallback to prevent getting stuck
-        for dy in [-1, 0, 1]:
-            for dx in [-1, 0, 1]:
-                if dy == 0 and dx == 0: continue
-                ny, nx = y + dy, x + dx
-                if 0 <= ny < sim.grid_size[0] and 0 <= nx < sim.grid_size[1]:
-                    potential_moves.append(((ny, nx), pheromone_grid[ny,nx]))
-
-        if not potential_moves:
-            return (y, x)
-
-        # Sort moves by scent
-        potential_moves.sort(key=lambda item: item[1], reverse=True)
+        sensor_angle_rad = np.deg2rad(params['sensor_angle_degrees'])
+        rotation_angle_rad = np.deg2rad(params['rotation_angle_degrees'])
         
-        # Pick randomly from the top 20% of best-scented locations
-        # This is the key to creating branching, exploratory paths.
-        num_choices = max(1, int(len(potential_moves) * 0.2))
-        best_pos = random.choice(potential_moves[:num_choices])[0]
-
-        # Update momentum
-        soldier.last_move = (best_pos[0] - y, best_pos[1] - x)
+        (new_y, new_x), new_heading = get_next_move(
+            soldier.y, soldier.x, soldier.heading, pheromone_grid,
+            sim.grid_size[0], sim.grid_size[1],
+            sensor_angle_rad, rotation_angle_rad,
+            params['sensor_distance']
+        )
         
-        return best_pos
+        soldier.heading = new_heading
+        
+        return new_y, new_x

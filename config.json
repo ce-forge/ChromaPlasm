@@ -1,20 +1,24 @@
 {
   "run_settings": {
     "video_id_prefix": "yt",
-    "total_frames": 900,
+    "total_frames": 1800,
     "fps": 30
   },
   "engine_settings": {
-    "pheromone_decay_rate": 0.985,
-    "pheromone_deposit_amount": 8.0,
-    "base_pump_amount": 100.0,
-    "pheromone_blur_sigma": 0.6,
-    "combat_win_chance": 0.25
+    "pheromone_decay_rate": 0.99,
+    "pheromone_deposit_amount": 150.0,
+    "pheromone_blur_sigma": 2.5,
+    "sensor_angle_degrees": 45.0,
+    "sensor_distance": 15.0,
+    "rotation_angle_degrees": 22.5,
+    "combat_chance": 0.6,
+    "enemy_sense_radius": 30.0,
+    "base_attack_radius": 50.0,
+    "ai_update_interval": 10
   },
   "spawning_settings": {
-    "spawn_rate": 1,
+    "spawn_rate": 2,
     "units_per_spawn": 4
-    
   },
   "narrative_cues": {
     "beat_drop_frame": 300
@@ -28,7 +32,7 @@
   },
   "presentation_settings": {
     "question_text": "WHICH IS THE SUPERIOR CHROMA PLASM?",
-    "font_path": "assets/fonts/runescape.ttf",
+    "font_path": "src/assets/fonts/runescape.ttf",
     "font_size": 80
   }
 }
