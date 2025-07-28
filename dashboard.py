@@ -25,6 +25,7 @@ class Dashboard:
         # --- Editor State & Data ---
         self.current_mode = 'SIMULATION'
         self.is_editing_spawns = False
+        self.editor_port_mode = 'DRAG' # NEW: Tracks if we are dragging, adding, or deleting ports.
         self.dragged_object = None
         self.drag_type = None
         self.drag_offset = (0, 0)
@@ -172,13 +173,24 @@ class Dashboard:
             y_offset += 40
 
             pygame_gui.elements.UILabel(relative_rect=pygame.Rect(10, y_offset, 100, 30), text="Shape:", manager=self.ui_manager, container=self.selection_params_container)
-            self.selection_ui_elements['shape_dropdown'] = pygame_gui.elements.UIDropDownMenu(options_list=['Y', 'N', 'BOX'], starting_option=base.shape_name, relative_rect=pygame.Rect(120, y_offset, content_width - 130, 30), manager=self.ui_manager, container=self.selection_params_container)
+            self.selection_ui_elements['shape_dropdown'] = pygame_gui.elements.UIDropDownMenu(options_list=['Y', 'N', 'BOX', 'ARROWHEAD'], starting_option=base.shape_name, relative_rect=pygame.Rect(120, y_offset, content_width - 130, 30), manager=self.ui_manager, container=self.selection_params_container)
             y_offset += 50
             
             btn_text = "Save Spawns" if self.is_editing_spawns else "Modify Spawns"
             self.selection_ui_elements['modify_spawns_button'] = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, y_offset, content_width - 20, 40), text=btn_text, manager=self.ui_manager, container=self.selection_params_container)
+            y_offset += 45
+            
             if self.is_editing_spawns:
                 self.selection_ui_elements['modify_spawns_button'].select()
+
+                button_width = (content_width - 30) // 2
+                add_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(10, y_offset, button_width, 30), text="Add Port", manager=self.ui_manager, container=self.selection_params_container)
+                del_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(20 + button_width, y_offset, button_width, 30), text="Delete Port", manager=self.ui_manager, container=self.selection_params_container)
+                self.selection_ui_elements['add_port_button'] = add_button
+                self.selection_ui_elements['delete_port_button'] = del_button
+
+                if self.editor_port_mode == 'ADD': add_button.select()
+                elif self.editor_port_mode == 'DELETE': del_button.select()
 
     def handle_events(self):
         time_delta = self.clock.tick(60) / 1000.0
@@ -198,23 +210,29 @@ class Dashboard:
                     self.selected_object = None
                     self.update_selection_panel()
                 
-                if self.selected_object and 'modify_spawns_button' in self.selection_ui_elements:
-                    if event.ui_element == self.selection_ui_elements['modify_spawns_button']:
+                if self.selected_object:
+                    if event.ui_element == self.selection_ui_elements.get('modify_spawns_button'):
                         self.is_editing_spawns = not self.is_editing_spawns
+                        self.editor_port_mode = 'DRAG' # Always reset to drag mode
                         self.update_selection_panel()
+                    
+                    if self.is_editing_spawns:
+                        if event.ui_element == self.selection_ui_elements.get('add_port_button'):
+                            self.editor_port_mode = 'DRAG' if self.editor_port_mode == 'ADD' else 'ADD'
+                            self.update_selection_panel()
+                        elif event.ui_element == self.selection_ui_elements.get('delete_port_button'):
+                            self.editor_port_mode = 'DRAG' if self.editor_port_mode == 'DELETE' else 'DELETE'
+                            self.update_selection_panel()
 
-            # --- START: THE CRITICAL FIX ---
-            # This logic connects the UI elements to their handler functions.
             if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
-                self.handle_slider_move(event.ui_element) # This line was missing
-
+                self.handle_slider_move(event.ui_element)
+            
             if event.type == pygame_gui.UI_TEXT_ENTRY_FINISHED:
                 if event.ui_element == self.editor_title_entry:
                     self.shorts_title_text = event.text
-                else: # Route all other text entries to the parameter handler
-                    self.handle_text_entry(event.ui_element) # This line was missing/unreachable
-            # --- END: THE CRITICAL FIX ---
-            
+                else:
+                    self.handle_text_entry(event.ui_element)
+
             if event.type == pygame_gui.UI_DROP_DOWN_MENU_CHANGED and self.selected_object:
                 if event.ui_element == self.selection_ui_elements.get('team_dropdown'):
                     self.selected_object.update_attributes(team=event.text)
@@ -240,25 +258,29 @@ class Dashboard:
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.is_editing_spawns and self.selected_object:
+                if self.editor_port_mode == 'DELETE':
+                    port_to_delete_idx = -1
+                    for i, (port_y, port_x) in enumerate(self.selected_object.exit_ports):
+                        if (world_y - port_y)**2 + (world_x - port_x)**2 < 8**2: port_to_delete_idx = i; break
+                    if port_to_delete_idx != -1: self.selected_object.exit_ports.pop(port_to_delete_idx)
+                    return
+                elif self.editor_port_mode == 'ADD':
+                    if (world_y, world_x) not in self.selected_object.all_base_pixels: self.selected_object.exit_ports.append((world_y, world_x))
+                    return
                 for i, (port_y, port_x) in enumerate(self.selected_object.exit_ports):
                     if (world_y - port_y)**2 + (world_x - port_x)**2 < 8**2:
                         self.drag_type, self.dragged_object, self.selected_port_index = 'spawn_port', self.selected_object, i
-                        self.drag_offset = (world_y - port_y, world_x - port_x)
-                        return
+                        self.drag_offset = (world_y - port_y, world_x - port_x); return
             
             clicked_base = self.simulation.get_base_at(world_y, world_x)
             if clicked_base:
                 if self.selected_object != clicked_base:
-                    self.selected_object = clicked_base
-                    self.is_editing_spawns = False
-                    self.update_selection_panel()
+                    self.selected_object = clicked_base; self.is_editing_spawns = False; self.editor_port_mode = 'DRAG'; self.update_selection_panel()
                 self.drag_type, self.dragged_object = 'base', clicked_base
                 self.drag_offset = (world_y - clicked_base.pivot[0], world_x - clicked_base.pivot[1])
             else:
                 if not self.is_editing_spawns:
-                    self.selected_object = None
-                    self.dragged_object = None
-                    self.update_selection_panel()
+                    self.selected_object = None; self.dragged_object = None; self.update_selection_panel()
 
         if event.type == pygame.MOUSEMOTION and self.dragged_object:
             new_y, new_x = world_y - self.drag_offset[0], world_x - self.drag_offset[1]
@@ -266,11 +288,15 @@ class Dashboard:
                 snapped_y = round(new_y / EDITOR_GRID_SNAP_SIZE) * EDITOR_GRID_SNAP_SIZE
                 snapped_x = round(new_x / EDITOR_GRID_SNAP_SIZE) * EDITOR_GRID_SNAP_SIZE
                 self.dragged_object.pivot = (int(snapped_y), int(snapped_x))
-                self.dragged_object.recalculate_geometry()
+                # --- USE ULTRA-LIGHTWEIGHT PREVIEW ON DRAG ---
+                self.dragged_object.recalculate_preview()
             elif self.drag_type == 'spawn_port':
                 self.dragged_object.exit_ports[self.selected_port_index] = (int(new_y), int(new_x))
 
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if self.drag_type == 'base' and self.dragged_object:
+                # --- USE HIGH-QUALITY CALCULATION ON RELEASE ---
+                self.dragged_object.recalculate_geometry()
             self.dragged_object, self.drag_type, self.selected_port_index = None, None, -1
 
     def run(self):
