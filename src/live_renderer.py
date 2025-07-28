@@ -78,6 +78,24 @@ class LiveRenderer:
                 if 0 <= screen_x < viewport.rect.width and 0 <= screen_y < viewport.rect.height:
                     pygame.draw.circle(viewport_surface, (255, 255, 0), (screen_x, screen_y), 6, 2)
         
+        if selected_object:
+            highlight_color = (255, 255, 0, 150) # Yellow with some transparency
+            
+            # Create a small surface for the highlight pixel to handle transparency
+            pixel_size = max(1, PIXEL_SCALE * viewport.zoom)
+            highlight_surf = pygame.Surface((pixel_size, pixel_size), pygame.SRCALPHA)
+            highlight_surf.fill(highlight_color)
+
+            # Now, just loop through the pre-calculated rim pixels
+            for y, x in selected_object.rim_pixels:
+                # Convert world coordinates to screen coordinates
+                screen_x = (x - viewport.offset_x) * viewport.zoom * PIXEL_SCALE
+                screen_y = (y - viewport.offset_y) * viewport.zoom * PIXEL_SCALE
+
+                # Only draw if the pixel is visible on screen
+                if 0 <= screen_x < viewport.rect.width and 0 <= screen_y < viewport.rect.height:
+                    viewport_surface.blit(highlight_surf, (screen_x, screen_y))
+        
         for p in vfx_manager.particles:
             if hasattr(p, 'y') and p.y is not None:
                 screen_x = (p.x - viewport.offset_x) * viewport.zoom * PIXEL_SCALE
