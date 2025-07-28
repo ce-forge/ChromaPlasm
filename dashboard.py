@@ -203,9 +203,18 @@ class Dashboard:
                         self.is_editing_spawns = not self.is_editing_spawns
                         self.update_selection_panel()
 
-            if event.type == pygame_gui.UI_TEXT_ENTRY_FINISHED and event.ui_element == self.editor_title_entry:
-                self.shorts_title_text = event.text
+            # --- START: THE CRITICAL FIX ---
+            # This logic connects the UI elements to their handler functions.
+            if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
+                self.handle_slider_move(event.ui_element) # This line was missing
 
+            if event.type == pygame_gui.UI_TEXT_ENTRY_FINISHED:
+                if event.ui_element == self.editor_title_entry:
+                    self.shorts_title_text = event.text
+                else: # Route all other text entries to the parameter handler
+                    self.handle_text_entry(event.ui_element) # This line was missing/unreachable
+            # --- END: THE CRITICAL FIX ---
+            
             if event.type == pygame_gui.UI_DROP_DOWN_MENU_CHANGED and self.selected_object:
                 if event.ui_element == self.selection_ui_elements.get('team_dropdown'):
                     self.selected_object.update_attributes(team=event.text)
