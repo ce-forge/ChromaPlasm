@@ -1,7 +1,7 @@
-import pygame
 import numpy as np
 from numba import jit, prange
 import random
+import pygame
 import json
 from src.constants import *
 from src.base import Base
@@ -154,11 +154,9 @@ class Simulation:
     def get_team_base_health(self, team_name):
         team_id = TEAM_NAME_TO_ID.get(team_name.lower())
         if team_id is None: return 0
-        # Correctly calculates health directly from the base objects
         total_health = 0
         for base in self.bases:
-            if base.team_id == team_id:
-                total_health += len(base.current_armor_pixels)
+            if base.team_id == team_id: total_health += len(base.current_armor_pixels)
         return total_health
 
     def step(self, frame_count):
@@ -227,7 +225,6 @@ class Simulation:
         self.draw_bases_to_grid()
         for base in self.bases: base.update_spawning(self)
 
-        # --- THE FIX: Check for dead teams at the end of the step ---
         active_teams_in_scene = {b.team_id for b in self.bases}
         for team_id in active_teams_in_scene:
             team_name = TEAMS[team_id]['name']

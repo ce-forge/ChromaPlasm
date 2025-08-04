@@ -1,6 +1,8 @@
 import pygame
 import numpy as np
 import os
+import random
+import math
 from src.constants import *
 
 class LiveRenderer:
@@ -18,8 +20,12 @@ class LiveRenderer:
             self.font_path = None
             self.base_font_size = 50
 
+    def _get_transformed_points(self, base, scale_multiplier):
+        return [(base.pivot[1] + p[1] * base.scale * scale_multiplier, 
+                 base.pivot[0] + p[0] * base.scale * scale_multiplier) for p in base.core_template]
+
     def draw(self, screen, sim, vfx_manager, viewport, show_pheromones, 
-             selected_object=None, is_editing_spawns=False, title_text=""):
+             selected_object=None, is_editing_spawns=False, title_text="", dragged_object=None):
         if viewport.rect.width <= 0 or viewport.rect.height <= 0: return
         
         viewport_surface = pygame.Surface(viewport.rect.size); viewport_surface.fill((10, 10, 15))
@@ -48,21 +54,55 @@ class LiveRenderer:
         
         world_surface.blit(self.trail_surface, (0,0), special_flags=pygame.BLEND_RGBA_ADD)
 
-        grid_surface = pygame.surfarray.make_surface(self.color_array[sim.render_grid].transpose(1, 0, 2))
-        grid_surface.set_colorkey(COLOR_MAP[EMPTY][:3])
-
+        base_surface = pygame.Surface((SIM_WIDTH, SIM_HEIGHT), pygame.SRCALPHA)
+        
         for base in sim.bases:
             is_damaged = (sim.frame_count - base.last_damage_frame) < 5
             armor_color = (255, 255, 255) if is_damaged else TEAMS[base.team_id]['pheromone_color']
+            core_color_base = COLOR_MAP[BASE_CORE_OFFSET + base.team_id][:3]
+
+            # 1. Draw armor and solid core base from pixel data (This is working correctly)
+            for y, x in base.current_armor_pixels:
+                base_surface.set_at((x, y), armor_color)
+            for y, x in base.current_core_pixels:
+                base_surface.set_at((x, y), TEAMS[base.team_id]['pheromone_color'])
+
+            # 2. Calculate the pulse, but override it if the base's team is dead
             pulse = (np.sin(sim.frame_count * 0.05 + base.team_id) + 1) / 2
-            brightness = 1.0 + pulse * 0.5
-            core_color_base = COLOR_MAP[BASE_CORE_OFFSET + base.team_id]
-            core_color = tuple(min(255, int(c * brightness)) for c in core_color_base[:3])
-            for y, x in base.current_armor_pixels: grid_surface.set_at((x, y), armor_color)
-            for y, x in base.current_core_pixels: grid_surface.set_at((x, y), core_color)
-        
-        world_surface.blit(grid_surface, (0,0))
-        
+            if base.team_id in sim.dead_teams:
+                pulse = 0.0 # Force the pulse to its minimum value for a static, dim effect
+
+            # 3. Add the specific visual flair ON TOP using the (potentially overridden) pulse
+            if base.shape_type == 'polygon':
+                num_layers = 5
+                min_brightness = 0.7; max_brightness = 1.5
+                
+                # The rest of the logic now uses the corrected pulse value
+                dynamic_max_brightness = max_brightness + pulse * 2.0
+                brightness_range = dynamic_max_brightness - min_brightness
+                
+                for i in range(num_layers, 0, -1):
+                    t = i / num_layers
+                    layer_brightness = min_brightness + (1.0 - t) * brightness_range
+                    layer_color = tuple(min(255, max(0, int(c * layer_brightness))) for c in core_color_base)
+                    layer_scale = 1.0 * t
+                    points = self._get_transformed_points(base, layer_scale)
+                    if len(points) > 2:
+                        pygame.draw.polygon(base_surface, layer_color, points, width=0)
+            else: # Visual flair for 'Y' and 'N' shapes
+                core_thickness_pixels = max(1, int(base.core_thickness * 2))
+                
+                # The brightness calculation now uses the corrected pulse value
+                brightness = 1.0 + pulse * 0.6
+                core_color = tuple(min(255, int(c * brightness)) for c in core_color_base)
+                
+                for p1, p2 in base.core_template:
+                    y1, x1 = base.pivot[0] + p1[0] * base.scale, base.pivot[1] + p1[1] * base.scale
+                    y2, x2 = base.pivot[0] + p2[0] * base.scale, base.pivot[1] + p2[1] * base.scale
+                    pygame.draw.line(base_surface, core_color, (x1, y1), (x2, y2), core_thickness_pixels)
+
+        world_surface.blit(base_surface, (0,0))
+                
         for p in vfx_manager.particles:
             if hasattr(p, 'y') and p.y is not None:
                 alpha = int(255 * (p.lifespan / p.max_lifespan)); size = max(1.0, p.radius * PIXEL_SCALE * 0.5)
@@ -88,57 +128,37 @@ class LiveRenderer:
             final_render_surface.blit(title_surf, text_rect)
         except (FileNotFoundError, TypeError): pass
             
-        # --- REVISED UI LOGIC ---
         active_teams_in_scene = sorted(list(set(base.team_id for base in sim.bases)))
         if active_teams_in_scene:
-            groups = {}
-            for tid in active_teams_in_scene:
-                alliance_id = sim.alliance_map[tid]
-                if alliance_id not in groups: groups[alliance_id] = []
-                groups[alliance_id].append(tid)
-
-            # Revert to using top margin for this UI element
-            symbol_size = int(top_margin_rect.height * 0.32)
-            padding = int(symbol_size * 0.5)
-            div_width = int(symbol_size * 0.3)
-            tally_font_size = int(symbol_size * 0.65) # Smaller font for the tally
-            
-            total_width = sum(len(teams) * (symbol_size + padding) for teams in groups.values()) - padding
-            total_width += (len(groups) - 1) * (div_width + padding * 2)
-            
-            x_pos = top_margin_rect.centerx - total_width // 2
-            first_group = True
-            
+            groups = {}; [groups.setdefault(sim.alliance_map[tid], []).append(tid) for tid in active_teams_in_scene]
+            symbol_size = int(top_margin_rect.height * 0.32); padding = int(symbol_size * 0.5); div_width = int(symbol_size * 0.3)
+            total_width = sum(len(teams) * (symbol_size + padding) for teams in groups.values()) - padding + (len(groups) - 1) * (div_width + padding * 2)
+            x_pos = top_margin_rect.centerx - total_width // 2; first_group = True
             for aid in sorted(groups.keys()):
                 if not first_group:
                     pygame.draw.line(final_render_surface, (150, 150, 160), (x_pos + padding, top_margin_rect.bottom - (symbol_size*1.1) - padding), (x_pos + padding, top_margin_rect.bottom - padding), 2)
                     x_pos += div_width + padding * 2
-                
                 for team_id in groups[aid]:
-                    team, color = TEAMS[team_id], TEAMS[team_id]['color']
-                    y_pos = top_margin_rect.bottom - symbol_size - padding
+                    team, color = TEAMS[team_id], TEAMS[team_id]['color']; y_pos = top_margin_rect.bottom - symbol_size - padding
+                    border_rect = pygame.Rect(x_pos - 1, y_pos - 1, symbol_size + 2, symbol_size + 2)
+                    pygame.draw.rect(final_render_surface, (10, 10, 15), border_rect, 0)
                     symbol_rect = pygame.Rect(x_pos, y_pos, symbol_size, symbol_size)
-
                     if team_id in sim.dead_teams:
-                        faded_symbol = pygame.Surface(symbol_rect.size, pygame.SRCALPHA)
-                        faded_symbol.fill((*color, 128))
+                        faded_symbol = pygame.Surface(symbol_rect.size, pygame.SRCALPHA); faded_symbol.fill((*color, 128))
                         final_render_surface.blit(faded_symbol, symbol_rect.topleft)
                         pygame.draw.line(final_render_surface, (255, 50, 50), symbol_rect.topleft, symbol_rect.bottomright, 4)
                         pygame.draw.line(final_render_surface, (255, 50, 50), symbol_rect.topright, symbol_rect.bottomleft, 4)
                     else:
                         pygame.draw.rect(final_render_surface, color, symbol_rect)
-
-                    # --- THE FIX: Draw Kill Tally instead of Health ---
                     kill_count = sim.kill_counts[team_id]
                     if kill_count > 0:
                         try:
+                            tally_font_size = int(symbol_size * 0.65)
                             tally_font = pygame.font.Font(self.font_path, tally_font_size)
                             tally_surf = tally_font.render(str(kill_count), True, color)
-                            # Position the tally cleanly below the symbol
                             tally_rect = tally_surf.get_rect(midtop=symbol_rect.midbottom)
                             final_render_surface.blit(tally_surf, tally_rect)
                         except (FileNotFoundError, TypeError): pass
-
                     x_pos += symbol_size + padding
                 first_group = False
 
@@ -147,14 +167,26 @@ class LiveRenderer:
         blit_x = (viewport.rect.width / 2) - viewport.offset_x * PIXEL_SCALE * zoom; blit_y = (viewport.rect.height / 2) - viewport.offset_y * PIXEL_SCALE * zoom
         viewport_surface.blit(scaled_final_surf, (blit_x, blit_y)); pygame.draw.rect(viewport_surface, (200, 200, 220), pygame.Rect(blit_x, blit_y, scaled_final_surf.get_width(), scaled_final_surf.get_height()), 2)
         
-        if selected_object or is_editing_spawns:
-            game_area_screen_x = blit_x; game_area_screen_y = blit_y + (VIDEO_TOP_MARGIN * zoom)
-            if selected_object:
-                highlight_color = (255, 255, 0); pixel_size = max(1, PIXEL_SCALE * zoom)
-                for y, x in selected_object.rim_pixels: pygame.draw.rect(viewport_surface, highlight_color, (game_area_screen_x + (x*PIXEL_SCALE*zoom), game_area_screen_y + (y*PIXEL_SCALE*zoom), pixel_size, pixel_size), 1)
-            if is_editing_spawns:
-                 port_color = (255, 255, 0)
-                 for y, x in selected_object.exit_ports: pygame.draw.circle(viewport_surface, port_color, (game_area_screen_x + (x*PIXEL_SCALE*zoom), game_area_screen_y + (y*PIXEL_SCALE*zoom)), int(max(2, 6 * zoom)), 2)
+        if dragged_object:
+            core_color = COLOR_MAP[BASE_CORE_OFFSET + dragged_object.team_id]
+            for y,x in dragged_object.current_core_pixels:
+                screen_x = blit_x + ((x * PIXEL_SCALE) * zoom)
+                screen_y = blit_y + ((y * PIXEL_SCALE + VIDEO_TOP_MARGIN) * zoom)
+                pygame.draw.rect(viewport_surface, core_color, (screen_x, screen_y, PIXEL_SCALE*zoom, PIXEL_SCALE*zoom))
+
+        if selected_object and not is_editing_spawns:
+            highlight_color = (255, 255, 0)
+            for y,x in selected_object.rim_pixels:
+                screen_x = blit_x + ((x * PIXEL_SCALE) * zoom)
+                screen_y = blit_y + ((y * PIXEL_SCALE + VIDEO_TOP_MARGIN) * zoom)
+                pygame.draw.rect(viewport_surface, highlight_color, (screen_x, screen_y, PIXEL_SCALE*zoom, PIXEL_SCALE*zoom), 1)
+
+        if is_editing_spawns and selected_object:
+             port_color = (255, 255, 0)
+             for y, x in selected_object.exit_ports:
+                screen_x = blit_x + ((x * PIXEL_SCALE) * zoom)
+                screen_y = blit_y + ((y * PIXEL_SCALE + VIDEO_TOP_MARGIN) * zoom)
+                pygame.draw.circle(viewport_surface, port_color, (screen_x, screen_y), int(max(2, 6 * zoom)), 2)
 
         screen.blit(viewport_surface, viewport.rect.topleft)
 
