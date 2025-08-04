@@ -31,8 +31,11 @@
     "zoom_level_on_loser": 0.6
   },
   "presentation_settings": {
-    "question_text": "WHICH IS THE SUPERIOR CHROMA PLASM?",
+    "question_text": "WHO WILL WIN?",
     "font_path": "src/assets/fonts/runescape.ttf",
-    "font_size": 80
+    "font_size": 80,
+    "agent_size": 1.5,
+    "glow_intensity": 255,
+    "trail_fade_rate": 25
   }
 }

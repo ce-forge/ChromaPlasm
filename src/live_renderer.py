@@ -11,10 +11,9 @@ class LiveRenderer:
         self.background_surface = self._create_background_surface()
         self.gradient_surface = self._create_fade_gradient((16, 16, 26), 60, VIDEO_WIDTH)
         self.trail_surface = pygame.Surface((SIM_WIDTH, SIM_HEIGHT), pygame.SRCALPHA)
-        self.team_color_map = np.array([TEAMS[i]['color'] for i in range(len(TEAMS))], dtype=np.uint8)
         try:
-            self.font_path = config.font_path
-            self.base_font_size = config.font_size
+            self.font_path = self.config.font_path
+            self.base_font_size = self.config.font_size
         except AttributeError:
             self.font_path = None
             self.base_font_size = 50
@@ -26,30 +25,29 @@ class LiveRenderer:
         viewport_surface = pygame.Surface(viewport.rect.size); viewport_surface.fill((10, 10, 15))
         world_surface = self.background_surface.copy()
         
+        fade_alpha = getattr(self.config, 'trail_fade_rate', 25)
         fade_surf = pygame.Surface(self.trail_surface.get_size(), pygame.SRCALPHA)
-        fade_surf.fill((0, 0, 0, 25))
+        fade_surf.fill((0, 0, 0, fade_alpha))
         self.trail_surface.blit(fade_surf, (0,0))
-        
-        # --- REVISED RENDER ORDER ---
-        
-        # 1. Prepare the agent glow layer first.
-        if show_pheromones:
-            for p_surf in sim.pheromone_surfaces.values():
-                self.trail_surface.blit(p_surf, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
         
         alive_mask = sim.agent_health[:sim.agent_count] > 0
         positions = sim.agent_positions[:sim.agent_count][alive_mask]
         teams = sim.agent_teams[:sim.agent_count][alive_mask]
         
+        if show_pheromones:
+            for p_surf in sim.pheromone_surfaces.values():
+                self.trail_surface.blit(p_surf, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+
+        agent_radius = getattr(self.config, 'agent_size', 1.5)
+        glow_intensity = getattr(self.config, 'glow_intensity', 255)
+
         for i in range(len(positions)):
             pos_x, pos_y = positions[i][1], positions[i][0]
-            color = TEAMS[teams[i]]['color']
-            pygame.draw.circle(self.trail_surface, color, (float(pos_x), float(pos_y)), 1.5, 0)
+            color = (*TEAMS[teams[i]]['color'], glow_intensity)
+            pygame.draw.circle(self.trail_surface, color, (float(pos_x), float(pos_y)), agent_radius, 0)
         
-        # 2. Blit the completed glow layer onto the main world surface.
         world_surface.blit(self.trail_surface, (0,0), special_flags=pygame.BLEND_RGBA_ADD)
 
-        # 3. Prepare the base layer with its dynamic effects.
         grid_surface = pygame.surfarray.make_surface(self.color_array[sim.render_grid].transpose(1, 0, 2))
         grid_surface.set_colorkey(COLOR_MAP[EMPTY][:3])
 
@@ -63,17 +61,14 @@ class LiveRenderer:
             for y, x in base.current_armor_pixels: grid_surface.set_at((x, y), armor_color)
             for y, x in base.current_core_pixels: grid_surface.set_at((x, y), core_color)
         
-        # 4. Blit the base layer ON TOP of the glow layer.
         world_surface.blit(grid_surface, (0,0))
         
-        # 5. Draw VFX particles last so they are on top of everything.
         for p in vfx_manager.particles:
             if hasattr(p, 'y') and p.y is not None:
                 alpha = int(255 * (p.lifespan / p.max_lifespan)); size = max(1.0, p.radius * PIXEL_SCALE * 0.5)
                 particle_surf = pygame.Surface((size, size), pygame.SRCALPHA); particle_surf.fill((*p.color[:3], alpha))
                 world_surface.blit(particle_surf, (p.x - size/2, p.y - size/2))
                 
-        # --- Final Compositing (Identical to your version) ---
         final_render_surface = pygame.Surface((VIDEO_WIDTH, VIDEO_HEIGHT), pygame.SRCALPHA)
         scaled_world = pygame.transform.scale(world_surface, (VIDEO_GAME_AREA_WIDTH, VIDEO_GAME_AREA_HEIGHT))
         final_render_surface.blit(scaled_world, (0, VIDEO_TOP_MARGIN))
@@ -93,25 +88,57 @@ class LiveRenderer:
             final_render_surface.blit(title_surf, text_rect)
         except (FileNotFoundError, TypeError): pass
             
-        active_teams = sorted(list(set(base.team_id for base in sim.bases)))
-        if active_teams:
-            groups = {}; [groups.setdefault(sim.alliance_map[tid], []).append(tid) for tid in active_teams]
-            symbol_size = int(top_margin_rect.height * 0.32); padding = int(symbol_size * 0.5); div_width = int(symbol_size * 0.3)
-            total_width = sum(len(teams) * (symbol_size + padding) for teams in groups.values()) - padding + (len(groups) - 1) * (div_width + padding * 2)
-            x_pos = top_margin_rect.centerx - total_width // 2; first_group = True
+        # --- REVISED UI LOGIC ---
+        active_teams_in_scene = sorted(list(set(base.team_id for base in sim.bases)))
+        if active_teams_in_scene:
+            groups = {}
+            for tid in active_teams_in_scene:
+                alliance_id = sim.alliance_map[tid]
+                if alliance_id not in groups: groups[alliance_id] = []
+                groups[alliance_id].append(tid)
+
+            # Revert to using top margin for this UI element
+            symbol_size = int(top_margin_rect.height * 0.32)
+            padding = int(symbol_size * 0.5)
+            div_width = int(symbol_size * 0.3)
+            tally_font_size = int(symbol_size * 0.65) # Smaller font for the tally
+            
+            total_width = sum(len(teams) * (symbol_size + padding) for teams in groups.values()) - padding
+            total_width += (len(groups) - 1) * (div_width + padding * 2)
+            
+            x_pos = top_margin_rect.centerx - total_width // 2
+            first_group = True
+            
             for aid in sorted(groups.keys()):
                 if not first_group:
                     pygame.draw.line(final_render_surface, (150, 150, 160), (x_pos + padding, top_margin_rect.bottom - (symbol_size*1.1) - padding), (x_pos + padding, top_margin_rect.bottom - padding), 2)
                     x_pos += div_width + padding * 2
+                
                 for team_id in groups[aid]:
-                    team, color = TEAMS[team_id], TEAMS[team_id]['color']; y_pos = top_margin_rect.bottom - symbol_size - padding; symbol_rect = pygame.Rect(x_pos, y_pos, symbol_size, symbol_size)
-                    pygame.draw.rect(final_render_surface, color, symbol_rect)
-                    try:
-                        health = sim.get_team_base_health(team['name']); h_font_size = int(symbol_size * 0.65)
-                        health_font = pygame.font.Font(self.font_path, h_font_size); health_font.set_bold(True)
-                        health_surf = health_font.render(str(health), True, (0,0,0)); health_rect = health_surf.get_rect(center=symbol_rect.center)
-                        final_render_surface.blit(health_surf, health_rect)
-                    except (FileNotFoundError, TypeError): pass
+                    team, color = TEAMS[team_id], TEAMS[team_id]['color']
+                    y_pos = top_margin_rect.bottom - symbol_size - padding
+                    symbol_rect = pygame.Rect(x_pos, y_pos, symbol_size, symbol_size)
+
+                    if team_id in sim.dead_teams:
+                        faded_symbol = pygame.Surface(symbol_rect.size, pygame.SRCALPHA)
+                        faded_symbol.fill((*color, 128))
+                        final_render_surface.blit(faded_symbol, symbol_rect.topleft)
+                        pygame.draw.line(final_render_surface, (255, 50, 50), symbol_rect.topleft, symbol_rect.bottomright, 4)
+                        pygame.draw.line(final_render_surface, (255, 50, 50), symbol_rect.topright, symbol_rect.bottomleft, 4)
+                    else:
+                        pygame.draw.rect(final_render_surface, color, symbol_rect)
+
+                    # --- THE FIX: Draw Kill Tally instead of Health ---
+                    kill_count = sim.kill_counts[team_id]
+                    if kill_count > 0:
+                        try:
+                            tally_font = pygame.font.Font(self.font_path, tally_font_size)
+                            tally_surf = tally_font.render(str(kill_count), True, color)
+                            # Position the tally cleanly below the symbol
+                            tally_rect = tally_surf.get_rect(midtop=symbol_rect.midbottom)
+                            final_render_surface.blit(tally_surf, tally_rect)
+                        except (FileNotFoundError, TypeError): pass
+
                     x_pos += symbol_size + padding
                 first_group = False
 
@@ -133,9 +160,7 @@ class LiveRenderer:
 
     def _create_fade_gradient(self, color, height, width):
         gradient = pygame.Surface((width, height), pygame.SRCALPHA);
-        for y in range(height):
-            alpha = 255 - int((y / height) * 255)
-            pygame.draw.line(gradient, (*color, alpha), (0, y), (width, y))
+        for y in range(height): alpha = 255 - int((y / height) * 255); pygame.draw.line(gradient, (*color, alpha), (0, y), (width, y))
         return gradient
 
     def _create_background_surface(self):
