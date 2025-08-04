@@ -20,6 +20,10 @@ class LiveRenderer:
             self.font_path = None
             self.base_font_size = 50
 
+    def clear_trails(self):
+        """Fills the trail surface with transparency, instantly clearing it."""
+        self.trail_surface.fill((0, 0, 0, 0))
+    
     def _get_transformed_points(self, base, scale_multiplier):
         return [(base.pivot[1] + p[1] * base.scale * scale_multiplier, 
                  base.pivot[0] + p[0] * base.scale * scale_multiplier) for p in base.core_template]
@@ -82,9 +86,9 @@ class LiveRenderer:
         
         world_surface.blit(base_surface, (0,0))
         
-        final_render_surface = pygame.Surface((VIDEO_WIDTH, VIDEO_HEIGHT), pygame.SRCALPHA)
+        self.final_render_surface = pygame.Surface((VIDEO_WIDTH, VIDEO_HEIGHT), pygame.SRCALPHA)
         scaled_world = pygame.transform.scale(world_surface, (VIDEO_GAME_AREA_WIDTH, VIDEO_GAME_AREA_HEIGHT))
-        final_render_surface.blit(scaled_world, (0, VIDEO_TOP_MARGIN))
+        self.final_render_surface.blit(scaled_world, (0, VIDEO_TOP_MARGIN))
         
         for p in vfx_manager.particles:
             if hasattr(p, 'y') and p.y is not None:
@@ -92,16 +96,16 @@ class LiveRenderer:
                 screen_y = p.y * PIXEL_SCALE + VIDEO_TOP_MARGIN
                 alpha = int(255 * (p.lifespan / p.max_lifespan)); size = max(1.0, p.radius * PIXEL_SCALE * 0.5)
                 particle_surf = pygame.Surface((size, size), pygame.SRCALPHA); particle_surf.fill((*p.color[:3], alpha))
-                final_render_surface.blit(particle_surf, (screen_x - size/2, screen_y - size/2))
+                self.final_render_surface.blit(particle_surf, (screen_x - size/2, screen_y - size/2))
         
         top_margin_rect = pygame.Rect(0, 0, VIDEO_WIDTH, VIDEO_TOP_MARGIN)
         bottom_margin_rect = pygame.Rect(0, VIDEO_HEIGHT - VIDEO_BOTTOM_MARGIN, VIDEO_WIDTH, VIDEO_BOTTOM_MARGIN)
         margin_color = (16, 16, 26, 220)
-        pygame.draw.rect(final_render_surface, margin_color, top_margin_rect)
-        pygame.draw.rect(final_render_surface, margin_color, bottom_margin_rect)
-        final_render_surface.blit(self.gradient_surface, (0, VIDEO_TOP_MARGIN))
+        pygame.draw.rect(self.final_render_surface, margin_color, top_margin_rect)
+        pygame.draw.rect(self.final_render_surface, margin_color, bottom_margin_rect)
+        self.final_render_surface.blit(self.gradient_surface, (0, VIDEO_TOP_MARGIN))
         bottom_gradient = pygame.transform.flip(self.gradient_surface, False, True)
-        final_render_surface.blit(bottom_gradient, (0, VIDEO_HEIGHT - VIDEO_BOTTOM_MARGIN - self.gradient_surface.get_height()))
+        self.final_render_surface.blit(bottom_gradient, (0, VIDEO_HEIGHT - VIDEO_BOTTOM_MARGIN - self.gradient_surface.get_height()))
 
         active_teams_in_scene = sorted(list(set(base.team_id for base in sim.bases)))
 
@@ -111,7 +115,7 @@ class LiveRenderer:
             title_font = pygame.font.Font(self.font_path, title_font_size)
             title_surf = title_font.render(title_text, True, (220, 220, 230))
             text_rect = title_surf.get_rect(centerx=top_margin_rect.centerx, y=top_margin_rect.y + top_margin_rect.height * 0.15)
-            final_render_surface.blit(title_surf, text_rect)
+            self.final_render_surface.blit(title_surf, text_rect)
             
             if active_teams_in_scene:
                 # --- This section now uses your preferred layout logic ---
@@ -147,7 +151,7 @@ class LiveRenderer:
                 
                 for aid in sorted(groups.keys()):
                     if not first_group and len(groups) > 1:
-                        pygame.draw.line(final_render_surface, (150, 150, 160), 
+                        pygame.draw.line(self.final_render_surface, (150, 150, 160), 
                                          (x_pos + padding, top_margin_rect.bottom - (symbol_size*1.1) - padding), 
                                          (x_pos + padding, top_margin_rect.bottom - padding), 2)
                         x_pos += div_width + padding * 2
@@ -157,17 +161,17 @@ class LiveRenderer:
                         y_pos = top_margin_rect.bottom - symbol_size - padding
                         
                         border_rect = pygame.Rect(x_pos - 1, y_pos - 1, symbol_size + 2, symbol_size + 2)
-                        pygame.draw.rect(final_render_surface, (10, 10, 15), border_rect, 0)
+                        pygame.draw.rect(self.final_render_surface, (10, 10, 15), border_rect, 0)
                         symbol_rect = pygame.Rect(x_pos, y_pos, symbol_size, symbol_size)
                         
                         if team_id in sim.dead_teams:
                             faded_symbol = pygame.Surface(symbol_rect.size, pygame.SRCALPHA)
                             faded_symbol.fill((*color, 128))
-                            final_render_surface.blit(faded_symbol, symbol_rect.topleft)
-                            pygame.draw.line(final_render_surface, (255, 50, 50), symbol_rect.topleft, symbol_rect.bottomright, 4)
-                            pygame.draw.line(final_render_surface, (255, 50, 50), symbol_rect.topright, symbol_rect.bottomleft, 4)
+                            self.final_render_surface.blit(faded_symbol, symbol_rect.topleft)
+                            pygame.draw.line(self.final_render_surface, (255, 50, 50), symbol_rect.topleft, symbol_rect.bottomright, 4)
+                            pygame.draw.line(self.final_render_surface, (255, 50, 50), symbol_rect.topright, symbol_rect.bottomleft, 4)
                         else:
-                            pygame.draw.rect(final_render_surface, color, symbol_rect)
+                            pygame.draw.rect(self.final_render_surface, color, symbol_rect)
                         
                         # --- MODIFIED: Kill count now uses the new visual style ---
                         kill_count = sim.kill_counts[team_id]
@@ -177,7 +181,7 @@ class LiveRenderer:
                         # Text is always white for readability
                         tally_surf = tally_font.render(str(kill_count), True, (220, 220, 230))
                         tally_rect = tally_surf.get_rect(midtop=symbol_rect.midbottom)
-                        final_render_surface.blit(tally_surf, tally_rect)
+                        self.final_render_surface.blit(tally_surf, tally_rect)
                         
                         x_pos += symbol_size + padding
                     first_group = False
@@ -189,17 +193,17 @@ class LiveRenderer:
             seconds_remaining = max(0, total_seconds - current_seconds); minutes = int(seconds_remaining // 60); seconds = int(seconds_remaining % 60)
             timer_text = f"{minutes:02d}:{seconds:02d}"; bar_width = bottom_margin_rect.width * 0.4; bar_height = 8
             bar_x = bottom_margin_rect.centerx - bar_width / 2; bar_y = bottom_margin_rect.top + 30
-            bg_bar_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height); pygame.draw.rect(final_render_surface, (10, 10, 15), bg_bar_rect)
+            bg_bar_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height); pygame.draw.rect(self.final_render_surface, (10, 10, 15), bg_bar_rect)
             progress = current_seconds / total_seconds; fg_bar_width = bar_width * (1 - progress)
-            fg_bar_rect = pygame.Rect(bar_x, bar_y, fg_bar_width, bar_height); pygame.draw.rect(final_render_surface, (200, 200, 220), fg_bar_rect)
-            pygame.draw.rect(final_render_surface, (80, 80, 100), bg_bar_rect, 1)
+            fg_bar_rect = pygame.Rect(bar_x, bar_y, fg_bar_width, bar_height); pygame.draw.rect(self.final_render_surface, (200, 200, 220), fg_bar_rect)
+            pygame.draw.rect(self.final_render_surface, (80, 80, 100), bg_bar_rect, 1)
             font_scale = VIDEO_HEIGHT / 1920.0; timer_font_size = int(self.base_font_size * font_scale * 0.7)
             timer_font = pygame.font.Font(self.font_path, timer_font_size); timer_surf = timer_font.render(timer_text, True, (220, 220, 230))
-            timer_rect = timer_surf.get_rect(centerx=bottom_margin_rect.centerx, bottom=bar_y - 5); final_render_surface.blit(timer_surf, timer_rect)
+            timer_rect = timer_surf.get_rect(centerx=bottom_margin_rect.centerx, bottom=bar_y - 5); self.final_render_surface.blit(timer_surf, timer_rect)
         except (AttributeError, FileNotFoundError, TypeError): pass
 
         zoom = viewport.zoom
-        scaled_final_surf = pygame.transform.scale(final_render_surface, (int(VIDEO_WIDTH * zoom), int(VIDEO_HEIGHT * zoom)))
+        scaled_final_surf = pygame.transform.scale(self.final_render_surface, (int(VIDEO_WIDTH * zoom), int(VIDEO_HEIGHT * zoom)))
         blit_x = (viewport.rect.width / 2) - viewport.offset_x * PIXEL_SCALE * zoom; blit_y = (viewport.rect.height / 2) - viewport.offset_y * PIXEL_SCALE * zoom
         viewport_surface.blit(scaled_final_surf, (blit_x, blit_y)); pygame.draw.rect(viewport_surface, (200, 200, 220), pygame.Rect(blit_x, blit_y, scaled_final_surf.get_width(), scaled_final_surf.get_height()), 2)
 
@@ -220,7 +224,7 @@ class LiveRenderer:
                 pygame.draw.circle(viewport_surface, port_color, (screen_x, screen_y), int(max(2, 6 * zoom)), 2)
         
         if sim.winner_info is not None:
-            overlay_surf = pygame.Surface(scaled_final_surf.get_size(), pygame.SRCALPHA)
+            overlay_surf = pygame.Surface((VIDEO_WIDTH, VIDEO_HEIGHT), pygame.SRCALPHA)
             overlay_surf.fill((10, 10, 15, 180))
             try:
                 winner_id, win_reason = sim.winner_info['id'], sim.winner_info['reason']
@@ -246,8 +250,8 @@ class LiveRenderer:
                 line1_surf = font1.render(line1_text, True, winner_color)
                 line2_surf = font2.render(line2_text, True, (220, 220, 230))
                 
-                center_x = scaled_final_surf.get_width() / 2
-                center_y = scaled_final_surf.get_height() / 2
+                center_x = VIDEO_WIDTH / 2
+                center_y = VIDEO_HEIGHT / 2
                 
                 line1_rect = line1_surf.get_rect(centerx=center_x, centery=center_y - (line1_surf.get_height() / 2))
                 line2_rect = line2_surf.get_rect(centerx=center_x, top=line1_rect.bottom)
@@ -256,11 +260,10 @@ class LiveRenderer:
                 overlay_surf.blit(line2_surf, line2_rect)
 
             except (AttributeError, FileNotFoundError, TypeError) as e: print(f"Error rendering winner screen: {e}")
-            viewport_surface.blit(overlay_surf, (blit_x, blit_y))
+            
+            self.final_render_surface.blit(overlay_surf, (0, 0))
 
         screen.blit(viewport_surface, viewport.rect.topleft)
-
-
 
     def _create_fade_gradient(self, color, height, width):
         gradient = pygame.Surface((width, height), pygame.SRCALPHA);
@@ -269,9 +272,7 @@ class LiveRenderer:
 
     def _create_background_surface(self):
         background = pygame.Surface((SIM_WIDTH, SIM_HEIGHT)); background.fill((16, 16, 26)); center_x, center_y = SIM_WIDTH // 2, SIM_HEIGHT // 2
-        
-        # --- FIX: Implement centering logic for both grid layers ---
-        
+                
         # Layer 1: Fine grid
         grid_color_1 = (35, 35, 50); grid_spacing_1 = 10
         num_x_lines_1 = (SIM_WIDTH // grid_spacing_1) + 1

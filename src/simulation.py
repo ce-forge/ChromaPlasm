@@ -200,6 +200,7 @@ class Simulation:
                 damaged_team_id, killer_team_id = self.base_damage_events[i, 1], self.base_damage_events[i, 2]
                 for base in self.bases:
                     if base.team_id == damaged_team_id: base.last_damage_frame = frame_count
+                self.audio_manager.add_sfx(self.frame_count, 'crack')
                 self.kill_counts[killer_team_id] += 1
                 self.base_damage_events[i, 0] = 0
 
@@ -262,6 +263,8 @@ class Simulation:
         self.agent_count = 0
         for manager in self.pheromone_managers.values(): manager.grid.fill(0)
         self.draw_bases_to_grid()
+        for surf in self.pheromone_surfaces.values():
+            surf.fill((0, 0, 0, 0))
         self.kill_counts = {team['id']: 0 for team in TEAMS}
         self.dead_teams.clear()
         self.winner_info = None # Reset winner info

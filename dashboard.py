@@ -2,6 +2,9 @@ import pygame
 import pygame_gui
 import sys
 import json
+import os
+import subprocess
+import shutil
 from types import SimpleNamespace
 import numpy as np
 from src.constants import *
@@ -10,6 +13,7 @@ from src.vfx import VFXManager
 from src.audio_manager import AudioManager
 from src.live_renderer import LiveRenderer
 from src.viewport import Viewport
+from src.video_utils import render_simulation_to_frames, assemble_video, cleanup_frames
 
 class Dashboard:
     def __init__(self):
@@ -74,7 +78,8 @@ class Dashboard:
         self.reset_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(180, 10, 90, 60), text='RESET', manager=self.ui_manager, container=self.bottom_panel)
         self.toggle_pheromones_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(280, 10, 180, 30), text='Pheromones: ON', manager=self.ui_manager, container=self.bottom_panel)
         self.toggle_editor_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(280, 40, 180, 30), text='Enter Editor', manager=self.ui_manager, container=self.bottom_panel)
-        self.stats_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(470, 10, 840, 60), manager=self.ui_manager, container=self.bottom_panel)
+        self.record_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(470, 10, 120, 60), text='Record', manager=self.ui_manager, container=self.bottom_panel, object_id='#record_button')
+        self.stats_container = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(600, 10, 710, 60), manager=self.ui_manager, container=self.bottom_panel)
 
         self.sim_ui_group = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, -1), manager=self.ui_manager, container=self.right_panel)
         self.editor_ui_group = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect(10, 10, content_width, 270), manager=self.ui_manager, container=self.right_panel)
@@ -246,6 +251,7 @@ class Dashboard:
                 elif event.ui_element == self.reset_button: self.reset_simulation()
                 elif event.ui_element == self.toggle_pheromones_button: self.toggle_pheromone_display()
                 elif event.ui_element == self.toggle_editor_button: self.toggle_editor_mode()
+                elif event.ui_element == self.record_button: self.render_video()
                 elif event.ui_element == self.save_layout_button: self.save_layout_to_file()
                 elif event.ui_element == self.editor_add_base_button:
                     new_base = self.simulation.add_new_base()
@@ -341,6 +347,48 @@ class Dashboard:
         pygame.quit()
         sys.exit()
 
+    def render_video(self):
+        self.is_recording = True
+        self.record_button.set_text("Preparing...")
+        pygame.display.flip() # Show "Preparing..." message immediately
+
+        output_folder = os.path.join("output", "frames")
+        audio_path = os.path.join("output", "final_audio.wav")
+        video_path = os.path.join("output", "final_video.mp4")
+        
+        cleanup_frames(output_folder)
+        os.makedirs(output_folder, exist_ok=True)
+
+        self.reset_simulation()
+        
+        render_duration_frames = 4000
+        fps = self.config.fps
+
+        # Call the new utility function to handle the render loop
+        render_completed = render_simulation_to_frames(self, output_folder, render_duration_frames, fps)
+
+        if not render_completed:
+            cleanup_frames(output_folder)
+            self.record_button.set_text("Record")
+            print("Recording cancelled.")
+            self.is_recording = False
+            return
+
+        # --- Audio and Video Compilation ---
+        print("Finished rendering frames. Exporting audio...")
+        self.record_button.set_text("Audio...")
+        self.audio_manager.export_final_track(render_duration_frames, fps, audio_path)
+
+        print("Compiling video with FFmpeg...")
+        self.record_button.set_text("Encoding...")
+        
+        assemble_video(output_folder, audio_path, video_path, fps)
+        cleanup_frames(output_folder)
+        
+        self.record_button.set_text("Record")
+        self.is_recording = False
+
+
     def select_object_at(self, world_y, world_x):
         clicked_object = self.simulation.get_base_at(world_y, world_x) if world_y is not None else None
         if self.selected_object != clicked_object:
@@ -354,6 +402,8 @@ class Dashboard:
             base.last_damage_frame = -100 
         self.simulation.reset_dynamic_state()
         self.vfx_manager.particles.clear()
+        if hasattr(self, 'renderer'):
+            self.renderer.clear_trails()
         self.frame_count = 0
         if self.current_mode == 'SIMULATION':
             self.is_paused = False
@@ -431,6 +481,10 @@ class Dashboard:
                 base.recalculate_geometry(final_calculation=False, regenerate_ports=False)
         except (ValueError, TypeError):
             self.update_selection_panel()
+
+    def clear_trails(self):
+        """Fills the trail surface with transparency, instantly clearing it."""
+        self.trail_surface.fill((0, 0, 0, 0))
     
     def update_stats_panel(self):
         for element in self.stats_container.get_container().elements[:]:

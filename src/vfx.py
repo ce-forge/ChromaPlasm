@@ -36,7 +36,7 @@ class VFXManager:
             velocity = [random.uniform(-2.0, 2.0), random.uniform(-2.0, 2.0)]
             self.particles.append(Particle(y, x, p_color, lifespan, velocity, p_type='dot'))
 
-        if frame_num % 3 == 0:
+        if frame_num % 6 == 0:
             self.audio_manager.add_sfx(frame_num, 'boom')
     
     # --- THIS IS THE CORRECTED METHOD ---

@@ -46,6 +46,25 @@ class Base:
         if name == 'ARROWHEAD': return [ (-2, 4), (4, 0), (-2, -4) ]
         return [ (-4,-4), (4,-4), (4,4), (-4,4) ]
 
+    def _find_exterior_pixels(self, core_pixels_local, grid_h, grid_w):
+        q = deque()
+        visited = set()
+        corners = [(0, 0), (0, grid_w - 1), (grid_h - 1, 0), (grid_h - 1, grid_w - 1)]
+        for c in corners:
+            if c not in visited and 0 <= c[0] < grid_h and 0 <= c[1] < grid_w:
+                q.append(c); visited.add(c)
+
+        exterior_pixels = set()
+        while q:
+            y, x = q.popleft()
+            if (y,x) in core_pixels_local: continue
+            exterior_pixels.add((y,x))
+            for dy, dx in [(0,1), (0,-1), (1,0), (-1,0)]:
+                ny, nx = y + dy, x + dx
+                if 0 <= ny < grid_h and 0 <= nx < grid_w and (ny, nx) not in visited:
+                    visited.add((ny, nx)); q.append((ny, nx))
+        return exterior_pixels
+
     def recalculate_preview(self):
         thin_line_pixels = set()
         if self.shape_type == 'lines':
@@ -72,37 +91,37 @@ class Base:
         self.all_base_pixels = core_set
         self.current_armor_pixels = []
 
-    # --- THIS IS THE FIXED METHOD ---
     def recalculate_geometry(self, final_calculation=True, regenerate_ports=True):
         if regenerate_ports: self._relative_exit_ports.clear()
         
-        self.recalculate_preview() # This correctly generates self.current_core_pixels
+        self.recalculate_preview()
         core_set = set(self.current_core_pixels)
         
         if not core_set:
-            self.current_armor_pixels = []
-            self.all_base_pixels = set()
-            return
-
-        # New, simpler armor calculation
+            self.current_armor_pixels = []; self.all_base_pixels = set(); return
+        
+        armor_set = set()
         if final_calculation:
-            thickened_core = set()
-            # Expand the core by the armor thickness
-            for y, x in core_set:
+            margin = self.armor_thickness + 2
+            min_y, max_y = min(p[0] for p in core_set) - margin, max(p[0] for p in core_set) + margin
+            min_x, max_x = min(p[1] for p in core_set) - margin, max(p[1] for p in core_set) + margin
+            
+            local_grid_h = max_y - min_y + 1
+            local_grid_w = max_x - min_x + 1
+            
+            core_local = set((y - min_y, x - min_x) for y, x in core_set)
+            
+            ext_local = self._find_exterior_pixels(core_local, local_grid_h, local_grid_w)
+            armor_local = set()
+            for cy, cx in core_local:
                 for dy in range(-self.armor_thickness, self.armor_thickness + 1):
                     for dx in range(-self.armor_thickness, self.armor_thickness + 1):
-                        thickened_core.add((y + dy, x + dx))
-            
-            # The armor is the thickened shape with the core subtracted from it
-            armor_set = thickened_core - core_set
-            self.current_armor_pixels = list(armor_set)
-        else:
-            self.current_armor_pixels = []
+                        cand = (cy + dy, cx + dx)
+                        if cand not in core_local and cand in ext_local: armor_local.add(cand)
+            armor_set = set((y + min_y, x + min_x) for y, x in armor_local)
         
-        # Combine them for the full shape
-        self.all_base_pixels = core_set.union(self.current_armor_pixels)
-        
-        # Calculate the visible rim for highlighting
+        self.current_armor_pixels = list(armor_set)
+        self.all_base_pixels = core_set.union(armor_set)
         self.rim_pixels = set()
         for y, x in self.all_base_pixels:
             if not all(((y+dy, x+dx) in self.all_base_pixels for dy, dx in [(0,1),(0,-1),(1,0),(-1,0)])):

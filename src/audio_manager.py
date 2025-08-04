@@ -77,6 +77,8 @@ class AudioManager:
             return self._generate_pop(pitch_variation=pitch_var)
         if sfx_name == 'boom':
             return self._generate_boom(pitch_variation=pitch_var)
+        if sfx_name == 'crack':
+            return self._generate_crack(pitch_variation=pitch_var)
         return None
 
     def export_final_track(self, total_frames, fps, output_path):
@@ -126,3 +128,35 @@ class AudioManager:
         data += np.sin(2. * np.pi * (frequency * 1.5) * t) * 0.5; data *= envelope
         amplitude = np.iinfo(np.int16).max * 0.6; data = (np.clip(data, -1, 1) * amplitude).astype(np.int16)
         return AudioSegment(data.tobytes(), frame_rate=self.sample_rate, sample_width=2, channels=1)
+    
+    def _generate_crack(self, pitch_variation=0):
+        """Generates a multi-layered, crunchy sound for armor hits."""
+        duration_s = 0.2
+        t = np.linspace(0., duration_s, int(self.sample_rate * duration_s), endpoint=False)
+        
+        # 1. The initial "crack" - a sharp burst of noise
+        noise = np.random.uniform(-1, 1, len(t))
+        crack_envelope = np.exp(-t * 200) # Very fast decay
+        crack_sound = noise * crack_envelope
+
+        # 2. The metallic "ring" - two detuned high-frequency sine waves
+        freq1 = 880 + pitch_variation
+        freq2 = freq1 * 1.505 # A slightly detuned musical fifth for a metallic sound
+        ring_tone = (np.sin(2. * np.pi * freq1 * t) * 0.5 + 
+                     np.sin(2. * np.pi * freq2 * t) * 0.5)
+        ring_envelope = np.exp(-t * 30) # Slower decay
+        ring_sound = ring_tone * ring_envelope
+        
+        # 3. Mix the two parts together, with the crack being more prominent
+        data = crack_sound * 0.6 + ring_sound * 0.4
+        
+        # 4. Normalize the audio to prevent clipping and ensure it's audible
+        peak = np.max(np.abs(data))
+        if peak > 0:
+            data /= peak # Normalize to a range of [-1, 1]
+        
+        # 5. Set amplitude and convert to 16-bit format for pydub
+        amplitude = np.iinfo(np.int16).max * 0.5 # 50% volume
+        data_16bit = (data * amplitude).astype(np.int16)
+        
+        return AudioSegment(data_16bit.tobytes(), frame_rate=self.sample_rate, sample_width=2, channels=1)
