@@ -29,7 +29,27 @@ class LiveRenderer:
         fade_surf = pygame.Surface(self.trail_surface.get_size(), pygame.SRCALPHA)
         fade_surf.fill((0, 0, 0, 25))
         self.trail_surface.blit(fade_surf, (0,0))
+        
+        # --- REVISED RENDER ORDER ---
+        
+        # 1. Prepare the agent glow layer first.
+        if show_pheromones:
+            for p_surf in sim.pheromone_surfaces.values():
+                self.trail_surface.blit(p_surf, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+        
+        alive_mask = sim.agent_health[:sim.agent_count] > 0
+        positions = sim.agent_positions[:sim.agent_count][alive_mask]
+        teams = sim.agent_teams[:sim.agent_count][alive_mask]
+        
+        for i in range(len(positions)):
+            pos_x, pos_y = positions[i][1], positions[i][0]
+            color = TEAMS[teams[i]]['color']
+            pygame.draw.circle(self.trail_surface, color, (float(pos_x), float(pos_y)), 1.5, 0)
+        
+        # 2. Blit the completed glow layer onto the main world surface.
+        world_surface.blit(self.trail_surface, (0,0), special_flags=pygame.BLEND_RGBA_ADD)
 
+        # 3. Prepare the base layer with its dynamic effects.
         grid_surface = pygame.surfarray.make_surface(self.color_array[sim.render_grid].transpose(1, 0, 2))
         grid_surface.set_colorkey(COLOR_MAP[EMPTY][:3])
 
@@ -43,32 +63,17 @@ class LiveRenderer:
             for y, x in base.current_armor_pixels: grid_surface.set_at((x, y), armor_color)
             for y, x in base.current_core_pixels: grid_surface.set_at((x, y), core_color)
         
+        # 4. Blit the base layer ON TOP of the glow layer.
         world_surface.blit(grid_surface, (0,0))
-
-        if show_pheromones:
-            for p_surf in sim.pheromone_surfaces.values():
-                self.trail_surface.blit(p_surf, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
         
-        # --- THE FIX: Revert to the visually correct drawing loop ---
-        alive_mask = sim.agent_health[:sim.agent_count] > 0
-        positions = sim.agent_positions[:sim.agent_count][alive_mask]
-        teams = sim.agent_teams[:sim.agent_count][alive_mask]
-        
-        # This loop is less performant but visually correct, which is our priority.
-        for i in range(len(positions)):
-            pos_x, pos_y = positions[i][1], positions[i][0]
-            color = TEAMS[teams[i]]['color']
-            # We use float() to prevent the TypeError from NumPy data types
-            pygame.draw.circle(self.trail_surface, color, (float(pos_x), float(pos_y)), 1.5, 0)
-        
-        world_surface.blit(self.trail_surface, (0,0), special_flags=pygame.BLEND_RGBA_ADD)
-        
+        # 5. Draw VFX particles last so they are on top of everything.
         for p in vfx_manager.particles:
             if hasattr(p, 'y') and p.y is not None:
                 alpha = int(255 * (p.lifespan / p.max_lifespan)); size = max(1.0, p.radius * PIXEL_SCALE * 0.5)
                 particle_surf = pygame.Surface((size, size), pygame.SRCALPHA); particle_surf.fill((*p.color[:3], alpha))
                 world_surface.blit(particle_surf, (p.x - size/2, p.y - size/2))
                 
+        # --- Final Compositing (Identical to your version) ---
         final_render_surface = pygame.Surface((VIDEO_WIDTH, VIDEO_HEIGHT), pygame.SRCALPHA)
         scaled_world = pygame.transform.scale(world_surface, (VIDEO_GAME_AREA_WIDTH, VIDEO_GAME_AREA_HEIGHT))
         final_render_surface.blit(scaled_world, (0, VIDEO_TOP_MARGIN))
