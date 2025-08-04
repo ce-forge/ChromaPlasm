@@ -91,9 +91,12 @@ class Simulation:
         for team in TEAMS: self.pheromone_managers[team['id']].color = team['pheromone_color']
         self.pheromone_surfaces = { team['id']: pygame.Surface((self.grid_size[1], self.grid_size[0]), flags=pygame.SRCALPHA) for team in TEAMS }
         self.alliance_map = np.arange(len(TEAMS)); self.team_params_overrides = {}
+        
         self.max_agents = 10000 
         self.agent_positions = np.zeros((self.max_agents, 2), dtype=np.float32)
+        
         self.agent_headings = np.zeros(self.max_agents, dtype=np.float32)
+        
         self.agent_teams = np.zeros(self.max_agents, dtype=np.int8)
         self.agent_health = np.zeros(self.max_agents, dtype=np.int32)
         self.vfx_events = np.zeros((self.max_agents, 3), dtype=np.int32)
@@ -101,6 +104,8 @@ class Simulation:
         self.agent_count = 0; self.render_grid = np.full(self.grid_size, EMPTY, dtype=np.uint8)
         self.object_grid = np.full(self.grid_size, -1, dtype=np.int32)
         self.bases = []; self.kill_counts = {team['id']: 0 for team in TEAMS}; self.dead_teams = set()
+        self.winner_info = None
+        
         self._initialize_bases()
         self._compile_team_params()
 
@@ -230,6 +235,28 @@ class Simulation:
             team_name = TEAMS[team_id]['name']
             if self.get_team_base_health(team_name) == 0 and team_id not in self.dead_teams:
                 self.dead_teams.add(team_id)
+        
+        # --- NEW: Winner Detection Logic ---
+        if self.winner_info is None:
+            # Check for active alliances, not just teams
+            active_alliances = {self.alliance_map[b.team_id] for b in self.bases if self.get_team_base_health(TEAMS[b.team_id]['name']) > 0}
+            
+            # Condition 1: Only one alliance is left standing
+            if len(active_alliances) == 1:
+                winner_alliance_id = active_alliances.pop()
+                # Find a representative team from the winning alliance
+                winner_team_id = next(b.team_id for b in self.bases if self.alliance_map[b.team_id] == winner_alliance_id)
+                self.winner_info = {'id': winner_team_id, 'reason': 'elimination'}
+                self.vfx_manager.create_winner_celebration(winner_team_id, SIM_WIDTH // 2, SIM_HEIGHT // 2)
+
+            # Condition 2: Timer runs out
+            elif self.frame_count >= self.config.total_frames:
+                if self.kill_counts:
+                    winner_team_id = max(self.kill_counts, key=self.kill_counts.get)
+                    self.winner_info = {'id': winner_team_id, 'reason': 'kills'}
+                    self.vfx_manager.create_winner_celebration(winner_team_id, SIM_WIDTH // 2, SIM_HEIGHT // 2)
+                else:
+                    self.winner_info = {'id': -1, 'reason': 'draw'}
 
     def reset_dynamic_state(self):
         self.agent_count = 0
@@ -237,6 +264,7 @@ class Simulation:
         self.draw_bases_to_grid()
         self.kill_counts = {team['id']: 0 for team in TEAMS}
         self.dead_teams.clear()
+        self.winner_info = None # Reset winner info
 
     def add_new_base(self, team_name='Azure', shape_name='BOX'):
         new_base = Base(team_name, self.grid_size[0]//2, self.grid_size[1]//2, shape_name, self.config, self.grid_size[0], self.grid_size[1])
