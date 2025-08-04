@@ -3,73 +3,67 @@ from src.constants import *
 
 class Viewport:
     def __init__(self, rect):
-        self.rect = pygame.Rect(rect)  # The screen area this viewport occupies
-        self.zoom = 1.0
-        # The offset represents the top-left corner of the simulation world
-        # that should be drawn at the top-left of the viewport.
-        self.offset_x = 0.0
-        self.offset_y = 0.0
-
-        self.is_panning = False
-        self.pan_start_pos = (0, 0)
+        self.rect = pygame.Rect(rect)
+        self.offset_x = SIM_WIDTH / 2
+        self.offset_y = SIM_HEIGHT / 2
+        self.zoom = 0.5
+        self.panning = False
 
     def handle_event(self, event):
-        """Processes mouse events for panning and zooming."""
-        is_mouse_over = self.rect.collidepoint(pygame.mouse.get_pos())
-
-        if event.type == pygame.MOUSEWHEEL and is_mouse_over:
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            # Convert mouse screen coords to world coords before zoom
-            world_x_before, world_y_before = self.screen_to_world(mouse_x, mouse_y)
-            
-            # Apply zoom
-            self.zoom *= 1.1 if event.y > 0 else 0.9
-            self.zoom = max(0.2, min(5.0, self.zoom)) # Clamp zoom
-            
-            # Get world coords under mouse after zoom
-            world_x_after, world_y_after = self.screen_to_world(mouse_x, mouse_y)
-            
-            # Adjust offset to keep the point under the mouse stationary
-            self.offset_x += world_x_before - world_x_after
-            self.offset_y += world_y_before - world_y_after
-
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 2 and is_mouse_over:
-            self.is_panning = True
-            self.pan_start_pos = event.pos
-        
-        if event.type == pygame.MOUSEBUTTONUP and event.button == 2:
-            self.is_panning = False
-            
-        if event.type == pygame.MOUSEMOTION and self.is_panning:
-            dx, dy = event.rel
-            # Adjust offset by mouse movement, scaled by zoom
-            self.offset_x -= dx / (self.zoom * PIXEL_SCALE)
-            self.offset_y -= dy / (self.zoom * PIXEL_SCALE)
-
-    def screen_to_world(self, screen_x, screen_y):
-        """Converts coordinates from the global screen to the simulation world."""
-        # Adjust for viewport's position on the screen
-        local_x = screen_x - self.rect.x
-        local_y = screen_y - self.rect.y
-        
-        world_x = (local_x / (self.zoom * PIXEL_SCALE)) + self.offset_x
-        world_y = (local_y / (self.zoom * PIXEL_SCALE)) + self.offset_y
-        return world_x, world_y
-
-    def get_grid_pos(self, mouse_pos):
         """
-        Converts a global screen mouse position to a simulation grid coordinate.
-        Returns (grid_y, grid_x) or None if the click is outside the viewport.
+        Handles panning and zooming. Zoom is now multiplicative for better feel.
         """
-        if not self.rect.collidepoint(mouse_pos):
-            return None
+        # --- Panning Logic (Middle Mouse Button) ---
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 2:
+            if self.rect.collidepoint(event.pos): self.panning = True
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 2:
+            self.panning = False
+        elif event.type == pygame.MOUSEMOTION and self.panning:
+            self.offset_x -= event.rel[0] / self.zoom
+            self.offset_y -= event.rel[1] / self.zoom
 
-        world_x, world_y = self.screen_to_world(mouse_pos[0], mouse_pos[1])
-        
-        grid_x = int(world_x)
-        grid_y = int(world_y)
+        # --- Zooming Logic ---
+        elif event.type == pygame.MOUSEWHEEL:
+            mouse_pos = pygame.mouse.get_pos()
+            if self.rect.collidepoint(mouse_pos):
+                old_zoom = self.zoom
+                world_x_before, world_y_before = self.get_world_pos_from_screen(mouse_pos, old_zoom)
+                
+                # --- ADJUSTMENT: Multiplicative Zoom ---
+                # This feels more natural than adding a fixed amount.
+                zoom_factor = 1.1
+                if event.y > 0: # Zoom in
+                    self.zoom *= zoom_factor
+                elif event.y < 0: # Zoom out
+                    self.zoom /= zoom_factor
 
-        if 0 <= grid_y < SIM_HEIGHT and 0 <= grid_x < SIM_WIDTH:
-            return (grid_y, grid_x)
-        
+                # Clamp the zoom to reasonable limits
+                self.zoom = max(0.1, min(self.zoom, 5.0))
+                
+                world_x_after, world_y_after = self.get_world_pos_from_screen(mouse_pos, self.zoom)
+                self.offset_x += world_x_before - world_x_after
+                self.offset_y += world_y_before - world_y_after
+
+    def get_world_pos_from_screen(self, screen_pos, zoom_level):
+        """Helper to convert screen coordinates to raw world coordinates."""
+        vp_x = screen_pos[0] - self.rect.x; vp_y = screen_pos[1] - self.rect.y
+        mouse_dx_pixels = vp_x - self.rect.width / 2; mouse_dy_pixels = vp_y - self.rect.height / 2
+        world_dx = mouse_dx_pixels / (PIXEL_SCALE * zoom_level); world_dy = mouse_dy_pixels / (PIXEL_SCALE * zoom_level)
+        return self.offset_x + world_dx, self.offset_y + world_dy
+
+    def get_grid_pos(self, screen_pos):
+        """
+        Converts a screen-space mouse position into a simulation-space grid 
+        coordinate (y, x), accounting for the full render pipeline.
+        """
+        mouse_x = screen_pos[0] - self.rect.x; mouse_y = screen_pos[1] - self.rect.y
+        blit_x = (self.rect.width / 2) - self.offset_x * PIXEL_SCALE * self.zoom
+        blit_y = (self.rect.height / 2) - self.offset_y * PIXEL_SCALE * self.zoom
+        x_on_final_surf = (mouse_x - blit_x) / self.zoom; y_on_final_surf = (mouse_y - blit_y) / self.zoom
+        if not (0 <= x_on_final_surf < VIDEO_WIDTH and 0 <= y_on_final_surf < VIDEO_HEIGHT): return None
+        if y_on_final_surf < VIDEO_TOP_MARGIN or y_on_final_surf >= (VIDEO_HEIGHT - VIDEO_BOTTOM_MARGIN): return None
+        x_in_game_area = x_on_final_surf; y_in_game_area = y_on_final_surf - VIDEO_TOP_MARGIN
+        grid_x = x_in_game_area / PIXEL_SCALE; grid_y = y_in_game_area / PIXEL_SCALE
+        if 0 <= grid_x < SIM_WIDTH and 0 <= grid_y < SIM_HEIGHT:
+            return int(grid_y), int(grid_x)
         return None
