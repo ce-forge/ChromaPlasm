@@ -201,7 +201,8 @@ class Simulation:
                 for base in self.bases:
                     if base.team_id == damaged_team_id: base.last_damage_frame = frame_count
                 self.audio_manager.add_sfx(self.frame_count, 'crack')
-                self.kill_counts[killer_team_id] += 1
+                if self.frame_count < self.config.total_frames:
+                    self.kill_counts[killer_team_id] += 1
                 self.base_damage_events[i, 0] = 0
 
         alive_mask = self.agent_health[:self.agent_count] > 0
@@ -238,7 +239,7 @@ class Simulation:
                 self.dead_teams.add(team_id)
         
         # --- NEW: Winner Detection Logic ---
-        if self.winner_info is None:
+        if self.winner_info is None and self.frame_count > 0:
             # Check for active alliances, not just teams
             active_alliances = {self.alliance_map[b.team_id] for b in self.bases if self.get_team_base_health(TEAMS[b.team_id]['name']) > 0}
             

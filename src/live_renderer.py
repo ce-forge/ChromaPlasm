@@ -241,8 +241,8 @@ class LiveRenderer:
                     else: line2_text = "was the most hungry!"
                 
                 font_scale = scaled_final_surf.get_height() / 1920.0
-                line1_font_size = int(120 * font_scale)
-                line2_font_size = int(70 * font_scale)
+                line1_font_size = int(240 * font_scale)
+                line2_font_size = int(140 * font_scale)
                 
                 font1 = pygame.font.Font(self.font_path, line1_font_size)
                 font2 = pygame.font.Font(self.font_path, line2_font_size)
