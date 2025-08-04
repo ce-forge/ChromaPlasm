@@ -6,17 +6,12 @@ import json
 
 class Base:
     def __init__(self, team_name, pivot_y, pivot_x, shape_name, config, grid_h, grid_w):
-        # --- COMPATIBILITY FIX ---
-        # If an old team name is loaded from a file, convert it to the new name.
-        if team_name.lower() == 'red':
-            team_name = 'Crimson'
-        elif team_name.lower() == 'blue':
-            team_name = 'Azure'
+        if team_name.lower() == 'red': team_name = 'Crimson'
+        elif team_name.lower() == 'blue': team_name = 'Azure'
         
         self.team_name = team_name
         self.team_id = TEAM_NAME_TO_ID.get(team_name.lower())
         
-        # Failsafe: If team_id is STILL None (e.g., from a typo in the JSON), default to the first team.
         if self.team_id is None:
             print(f"WARNING: Base created with unknown team name '{team_name}'. Defaulting to team 0.")
             self.team_name = TEAM_ID_TO_NAME.get(0, "Default")
@@ -27,11 +22,12 @@ class Base:
         self.config = config
         self.id = f"{self.team_name}_{shape_name}_{pivot_y}_{pivot_x}"
         self.grid_h, self.grid_w = grid_h, grid_w
-
         self.scale = 8.0
         self.core_thickness, self.armor_thickness = 1, 2
         self._relative_exit_ports = []
         
+        self.last_damage_frame = -100
+
         self.core_template = self._get_shape_template(shape_name)
         self.current_armor_pixels, self.current_core_pixels = [], []
         self.rim_pixels = set()
@@ -85,13 +81,9 @@ class Base:
         self.current_core_pixels = list(core_set)
         self.current_armor_pixels = []
         self.all_base_pixels = core_set
-
         self.rim_pixels = set()
         for y, x in self.all_base_pixels:
-            if (y + 1, x) not in self.all_base_pixels or \
-            (y - 1, x) not in self.all_base_pixels or \
-            (y, x + 1) not in self.all_base_pixels or \
-            (y, x - 1) not in self.all_base_pixels:
+            if (y + 1, x) not in self.all_base_pixels or (y - 1, x) not in self.all_base_pixels or (y, x + 1) not in self.all_base_pixels or (y, x - 1) not in self.all_base_pixels:
                 self.rim_pixels.add((y, x))
 
     def recalculate_geometry(self, final_calculation=True, regenerate_ports=True):
@@ -104,7 +96,11 @@ class Base:
             margin = self.armor_thickness + 2
             min_y, max_y = min(p[0] for p in core_set) - margin, max(p[0] for p in core_set) + margin
             min_x, max_x = min(p[1] for p in core_set) - margin, max(p[1] for p in core_set) + margin
-            local_grid_h, local_grid_w = max_y - min_y, max_x - min_x
+            
+            local_grid_h = max_y - min_y
+            # <-- THE FIX: Was max_y - min_y
+            local_grid_w = max_x - min_x
+            
             core_local = set((y - min_y, x - min_x) for y, x in core_set)
             ext_local = self._find_exterior_pixels(core_local, local_grid_h, local_grid_w)
             armor_local = set()
@@ -116,15 +112,10 @@ class Base:
             armor_set = set((y + min_y, x + min_x) for y, x in armor_local)
         self.current_armor_pixels = list(armor_set)
         self.all_base_pixels = core_set.union(armor_set)
-
         self.rim_pixels = set()
         for y, x in self.all_base_pixels:
-            if (y + 1, x) not in self.all_base_pixels or \
-            (y - 1, x) not in self.all_base_pixels or \
-            (y, x + 1) not in self.all_base_pixels or \
-            (y, x - 1) not in self.all_base_pixels:
+            if (y + 1, x) not in self.all_base_pixels or (y - 1, x) not in self.all_base_pixels or (y, x + 1) not in self.all_base_pixels or (y, x - 1) not in self.all_base_pixels:
                 self.rim_pixels.add((y, x))
-
         if final_calculation and regenerate_ports:
             ideal_points = []
             if self.shape_name == 'Y':
@@ -172,7 +163,6 @@ class Base:
         if team_name:
             self.team_name = team_name
             self.team_id = TEAM_NAME_TO_ID.get(team_name.lower())
-        
         if shape_name and self.shape_name != shape_name:
             self.shape_name = shape_name
             self.core_template = self._get_shape_template(shape_name)
@@ -182,18 +172,12 @@ class Base:
     def update_spawning(self, sim):
         self.spawn_cooldown -= 1
         if self.spawn_cooldown <= 0:
-            # --- MODIFICATION: Use team_id for parameters ---
             units_to_spawn = int(sim.get_param(self.team_id, 'units_per_spawn'))
-                        
             open_ports = [(y, x) for y, x in self.exit_ports if 0 <= y < SIM_HEIGHT and 0 <= x < SIM_WIDTH]
-            
             if not open_ports:
                 self.spawn_cooldown = int(sim.get_param(self.team_id, 'spawn_rate'))
                 return
-
             for _ in range(units_to_spawn):
                 spawn_y, spawn_x = random.choice(open_ports)
-                # --- MODIFICATION: Pass team_id to create agents ---
                 sim.add_soldier(spawn_y, spawn_x, self.team_id, np.random.uniform(0, 2 * np.pi))
-            
             self.spawn_cooldown = int(sim.get_param(self.team_id, 'spawn_rate'))
