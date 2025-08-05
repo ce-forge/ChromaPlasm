@@ -1,5 +1,6 @@
 import random
 import math
+from src.constants import TEAMS
 
 class Particle:
     """A single particle for any visual effect."""
@@ -35,7 +36,28 @@ class VFXManager:
             velocity = [random.uniform(-2.0, 2.0), random.uniform(-2.0, 2.0)]
             self.particles.append(Particle(y, x, p_color, lifespan, velocity, p_type='dot'))
 
-        self.audio_manager.add_sfx(frame_num, 'boom')
+        if frame_num % 6 == 0:
+            self.audio_manager.add_sfx(frame_num, 'boom')
+    
+    # --- THIS IS THE CORRECTED METHOD ---
+    def create_winner_celebration(self, team_id, x, y):
+        if team_id == -1: return # Do not create VFX for a draw
+        
+        color = TEAMS[team_id]['color']
+        for _ in range(200): # Create a large burst of 200 particles
+            angle = random.uniform(0, 2 * math.pi)
+            speed = random.uniform(2, 6)
+            # Velocity is (y, x) to match the Particle's update logic
+            velocity = (math.sin(angle) * speed, math.cos(angle) * speed)
+            lifespan = random.randint(40, 80)
+            
+            # Create the particle with the CORRECT argument order: (y, x, color, lifespan, velocity)
+            particle = Particle(y, x, color, lifespan, velocity)
+            
+            # Set the radius separately
+            particle.radius = random.uniform(2, 5)
+            
+            self.particles.append(particle)
 
     def update_effects(self):
         """Update all active particles and remove dead ones."""

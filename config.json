@@ -1,8 +1,8 @@
 {
   "run_settings": {
     "video_id_prefix": "yt",
-    "total_frames": 1800,
-    "fps": 30
+    "total_frames": 3600,
+    "fps": 60
   },
   "engine_settings": {
     "pheromone_decay_rate": 0.99,
@@ -31,8 +31,11 @@
     "zoom_level_on_loser": 0.6
   },
   "presentation_settings": {
-    "question_text": "WHICH IS THE SUPERIOR CHROMA PLASM?",
+    "question_text": "WHO WILL WIN?",
     "font_path": "src/assets/fonts/runescape.ttf",
-    "font_size": 80
+    "font_size": 80,
+    "agent_size": 1.5,
+    "glow_intensity": 255,
+    "trail_fade_rate": 25
   }
 }

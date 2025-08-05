@@ -12,7 +12,7 @@ TEAMS = [
     {"id": 6, "name": "Jade",     "color": (0, 168, 107),  "pheromone_color": (0, 120, 80)},
     {"id": 7, "name": "Sapphire", "color": (15, 82, 186),  "pheromone_color": (10, 60, 140)},
     {"id": 8, "name": "Rose",     "color": (255, 105, 180),"pheromone_color": (200, 80, 140)},
-    {"id": 9, "name": "Onyx",     "color": (200, 200, 200),"pheromone_color": (150, 150, 150)},
+    {"id": 9, "name": "Onyx",     "color": (200, 200, 200),"pheromone_color": (80, 80, 80)},
 ]
 
 # --- DYNAMIC ID OFFSETS ---
